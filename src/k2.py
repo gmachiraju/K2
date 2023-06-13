@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 import networkx as nx
 
+CMAP="tab20"
 import utils
 
 
@@ -69,10 +70,11 @@ class K2Model():
         lambda: regularization strength for the model
     """
     def __init__(self, args):
-        # arguments 
         self.processor = args.processor
         self.variant = args.variant
         self.hparams = args.hparams
+        if self.processor == None:
+            raise Exception("Error: K2 Processor is not provided.")
 
         self.k = self.preprocessor.k
         # now construct data structures
@@ -83,15 +85,39 @@ class K2Model():
         # Make motif graph
         G = nx.complete_graph(self.k)
         [G.add_edge(i,i) for i in range(self.k)]
-        # TO-DO: add attribute values
+        # zero weights
+        for node in G.nodes:
+            G.nodes[node]['n_weight'] = 0.0
+        for edge in G.edges:
+            G.edges[edge]['e_weight'] = 0.0
         return G
     
     def visualize_motif_graph(self):
         # Visualize motif graph
         pos = nx.circular_layout(self.motif_graph)
-        nx.draw(self.motif_graph, pos=pos)
+        colors = [node for node in list(self.motif_graph.nodes())]
+        plt.figure()
+
+        n_weights = nx.get_node_attributes(self.motif_graph, 'n_weight').values()
+        n_size = []
+        for nw in n_weights:
+            ns = int(np.max([1, nw]))
+            ns = int(np.min([ns, 10]))
+            n_size.append(ns)
+        nx.draw_networkx_nodes(self.motif_graph, pos=pos, linewidths=n_size, node_color=colors, cmap=CMAP, edgecolors='black')
+
+        e_weights = nx.get_edge_attributes(self.motif_graph, 'e_weight').values()
+        e_thickness = []
+        for ew in e_weights:
+            et = int(np.max([1, ew]))
+            et = int(np.min([et, 10]))
+            e_thickness.append(et)
+        nx.draw_networkx_edges(self.motif_graph, pos=pos, width=e_thickness, alpha=0.5)
         plt.draw()
-        #TO-ADD: add colors to nodes -- try adding labels as attributes as well
+
+
+    def construct_sprite(self, G):
+        pass
 
     def visualize_sprite(self, G):
         # Visualize sprite
@@ -111,6 +137,15 @@ class K2Model():
             pass
         elif self.variant == "inferential":
             pass
+        pass
+
+    def construct_prospect_graph(self, G):
+        pass
+
+    def visualize_prospect_graph(self, G):
+        pass
+
+    def convert_prospect_to_map(self, G):
         pass
     
 
