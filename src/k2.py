@@ -63,11 +63,12 @@ class K2Processor():
 class K2Model():
     """
     processor: K2Processor object
+    r: context window size
     variant: "predictive" K2 models (e.g. LASSO) vs "inferential" K2 models (e.g. differential expression)
-    hparams: hyperparameters for the model (e.g. regularization strength)
-        alpha: significance level for the model
-        tau: log2 fold change threshold for the model
-        lambda: regularization strength for the model
+    hparams: hyperparameters for the variants (e.g. regularization strength)
+        alpha: significance level for INFERENTIAL variants
+        tau: log2 fold change threshold for INFERENTIAL variants
+        lambda: regularization strength for PREDICTIVE variants
     """
     def __init__(self, args):
         self.processor = args.processor
@@ -81,6 +82,8 @@ class K2Model():
         self.motif_graph = self.instantiate_motif_graph() # K_k
         self.description = self.variant + "-" + self.quantizer + "-" + str(self.k) + "-" + str(self.hparams)
         
+        self.class_graphs = [] # where we load mean graphs per class
+
     def instantiate_motif_graph(self):
         # Make motif graph
         G = nx.complete_graph(self.k)
@@ -115,9 +118,15 @@ class K2Model():
         nx.draw_networkx_edges(self.motif_graph, pos=pos, width=e_thickness, alpha=0.5)
         plt.draw()
 
-
     def construct_sprite(self, G):
-        pass
+        """
+        Takes a Map Graph G and constructs a sprite from it by applying an embedding quantizer
+        """
+        for node in G.nodes:
+            embedding =  G.nodes[node]['embedding']
+            # reassign embedding attribute as a motif pseudo-label
+            G.nodes[node]['embedding'] = self.processor.quantizer.predict(embedding)
+        return G
 
     def visualize_sprite(self, G):
         # Visualize sprite
@@ -126,18 +135,25 @@ class K2Model():
         plt.draw()
         #TO-ADD: add colors to nodes; should match colors in motif graph
 
-    def predictive_hashing(self, data_path):
-        pass
+    def hash_datum(self, G):
+        origin = G['origin']
+        # ITERATE through nodes in order starting from origin. Row-wise then column-wise?
+        # but this coord system doesn't exist in proteins, so we need to figure out a new way to iterate from origin
+        
+        # subgraph = nx.ego_graph(G,node,radius=k) 
+        # then neighbors are nodes of the subgraph: 
+        # neighbors = list(subgraph.nodes())
 
-    def inferential_hashing(self, data_path):
-        pass
+    def motif_graph_hash(self, data_path):    
+        for datum_path in os.listdir(data_path):
+            G = utils.deserialize
+            data_hashed = self.hash_datum(data_path)
 
-    def motif_graph_hash(self, data_path):
         if self.variant == "predictive":
             pass
         elif self.variant == "inferential":
             pass
-        pass
+
 
     def construct_prospect_graph(self, G):
         pass
@@ -149,8 +165,8 @@ class K2Model():
         pass
     
 
-
-
+def evaluation():
+    pass
 
 
 

@@ -1,19 +1,21 @@
 import numpy as np
+import networkx as nx
 
-def convert_img2graph(img):
+def convert_arr2graph(Z):
     """
-    Convert image to map graph
+    Convert embedded image (Array of embeddings) to map graph
     """
+    G = nx.Graph(origin=(None, None))
+    origin_flag = False
+    for (i,j), value in np.ndenumerate(Z[:,:,0]):
+        if np.sum(Z[i,j,:]) == 0.0:
+            continue
+        else:
+            if origin_flag == False:
+                G['origin'] = (i,j)
+                origin_flag = True
+            G.add_node((i,j), pos=(i,j), emb=Z[i,j,:])
+    
+
+def process_image_dataset(arr_dir, save_dir):
     pass
-
-
-# def fit_quantizer():
-#     # fit quantizer
-#     pass
-
-
-# def apply_quantizer(self, G):
-#     # apply quantizer
-#     for node in G.nodes():
-#         G.nodes[node]['embedding'] = self.quantizer.predict(G.nodes[node]['embedding'])
-#     return G
