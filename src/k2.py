@@ -103,8 +103,11 @@ class K2Processor():
         return array
 
     def partition_data(self):
-        # Visualize quantizer
-         # create df and partition by marker
+        """
+        This helper function helps us partition data into classes (and within class-1, identify salient objects).
+        Also helps for visualization downstream.
+        """
+        # create df and partition by marker
         ms = self.get_plot_markers()
         ms_dict = dict(zip(self.id_list, ms))
         embed_df = pd.DataFrame.from_dict(ms_dict, orient='index', columns=["marker"])
@@ -130,10 +133,13 @@ class K2Processor():
         return array
 
     def get_plot_markers(self):
+        """
+        Gives us a way to visualize different chunks
+        """
         sal_counter = 0
         so_dict = self.so_dict_path
         if so_dict is not {}:
-            so_dict = utils.deserialize(so_dict)
+            so_dict = utils.deserialize(so_dict)            
 
         ms = []
         for id_val in self.id_list:
@@ -151,9 +157,9 @@ class K2Processor():
             elif val == 1 and lab == "tumor":
                 sal_counter += 1
                 m = "X"
-            ms.append(m)
+            ms.append(m) # this is the case when so_dict is not passed in
 
-        print("sampled", str(sal_counter), "salient objects!")
+        print("sampled", str(sal_counter), "known salient objects!")
         return ms
     
     def partition_by_marker(self, mark_df):
@@ -294,6 +300,8 @@ class K2Model():
     def fit_kernel(self, normalize_flag=True):
         """
         Main method for training K2 model
+        Inputs:
+            normalize_flag: a boolean T/F value to toggle TF-IDF normalization
         """
         # tfidf scaling
         if normalize_flag == True:
@@ -316,6 +324,8 @@ class K2Model():
     def train_predictive_k2(self, scaling_flag=True):
         """
         Predictive K2 model
+        Inputs:
+            scaling_flag: a boolean T/F value to toggle additional standard scaling
         """
         l = self.hparams["lambda"]
         print("Fitting ElasticNet with l1 ratio: "+str(l)+"...")
@@ -371,6 +381,8 @@ class K2Model():
         """
         Predicts class-differential nodes in a Map Graph
         Performs prospection: nonlinear convolution with fitted B
+        Inputs:
+            G: networkx map graph 
         """
         # construct sprite via quantization
         S = self.construct_sprite(G)
@@ -450,7 +462,9 @@ class K2Model():
 
     def convert_motif2vec(self, Kk):
         """
-        Map motif graph to datum vector
+        Converts motif graph to datum vector.
+        Inputs:
+            Kk: networkx motif graph
         """
         vec = {}
         for node in Kk.nodes:
@@ -462,9 +476,12 @@ class K2Model():
         return vec
 
     def visualize_motif_graph(self, G=None):
-        # Visualize motif graph
+        """
+        Inputs:
+            G: networkx map graph
+        """
         if G is None:
-            print("No G provided, showing kernel hash graph")
+            print("No G provided, showing model-wide kernel hash-graph")
             G = self.w_hgraph
         else:
             # get sample-specific motif graph from map graph 
@@ -493,6 +510,10 @@ class K2Model():
         plt.draw()
     
     def sort_keys(self, key_list):
+        """
+        Helper function to take a list of keys (either single nodes or edges) and sort. 
+        For edges, we sort by 0th element and then1st element in tuple.
+        """
         # collect all nodes and edges
         nodes, edges = [], []
         for k in key_list:
@@ -507,6 +528,10 @@ class K2Model():
         return sorted
         
     def visualize_prospect_graph(self, P):
+        """
+        Inputs:
+            P: prospect graph
+        """
         utils.visualize_sprite(P, self.modality, prospect_flag=True)
     
     def construct_sprite(self, G):
@@ -519,18 +544,4 @@ class K2Model():
 
     def visualize_sprite(self, G):
         utils.visualize_sprite(G, self.modality)
-    
-
-# def evaluation(k2model, data_path, labels_path):
-#     """
-#     k2model: K2Model object
-#     data_path: path to test data
-#     labels_path: path to labels
-#     """
-#     pass
-
-
-
-
-
 
