@@ -80,13 +80,31 @@ def construct_sprite(G, processor):
         S.nodes[node]['emb'] = motif_label
     return S
 
+def get_prospect_range(P):
+    """
+    Computes the centered range of values for a prospect graph to display
+    ± maxmag is the range of values to display
+    Input: 
+        P: prospect graph
+    Output: maxmag
+    """
+    if type(P) == nx.classes.graph.Graph:
+        values = list(nx.get_node_attributes(P, 'emb').values())
+        minP = np.min(values)
+        maxP = np.max(values)
+    elif type(P) == np.ndarray:
+        minP = np.nanmin(P)
+        maxP = np.nanmax(P)
+    maxmag = np.max([np.abs(minP), np.abs(maxP)])
+    return maxmag
+
 def visualize_sprite(G, modality="graph", prospect_flag=False):
     # Visualize sprite
     plt.figure()
     colors = list(nx.get_node_attributes(G, 'emb').values())
     colors = [int(c) for c in colors]
     if type(colors[0]) != int:
-        raise Exception("Error: Sprite is multi-channel when it should be single-channel and categorical. Please quantize the Datum's Map Graph.")
+        raise Exception("Error: Sprite detected as multi-channel when it should be single-channel and categorical. Please quantize the Datum's Map Graph.")
 
     # for visualization, we scale the positions
     shape = "o"
@@ -100,15 +118,11 @@ def visualize_sprite(G, modality="graph", prospect_flag=False):
     our_cmap = custom_cmap
     if prospect_flag:
         our_cmap = plt.get_cmap("bwr")
+        maxmag = get_prospect_range(G)
 
     pos = nx.spring_layout(G, pos=spread_pos_dict, fixed=spread_pos_dict.keys(), k=10, iterations=100)
-    nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap)
-    plt.axis('off')
-    # if prospect_flag:
-    #     sm = plt.cm.ScalarMappable(cmap=our_cmap)
-    #     sm._A = []
-    #     plt.colorbar(sm)
-
+    nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag)
+    plt.axis('off')    
     plt.draw()
 
 def convert_graph2arr(S):
@@ -135,7 +149,7 @@ def quantize_Z(Z, kmeans_model, mode="dict"):
     for i in range(h):
         for j in range(w):
             Zij = Z[i,j,:]
-            if np.sum(Zij) > 0:
+            if np.sum(Zij) != 0:
                 if mode == "dict":
                     Zij = Zij.reshape(1, -1).astype('double')
                     cluster = kmeans_model.predict(Zij)[0]
@@ -145,19 +159,23 @@ def quantize_Z(Z, kmeans_model, mode="dict"):
                     cluster = kmeans_model.predict(Zij)[0]
                 Z_viz[i,j,:] = cluster
                 idx += 1
-
     return Z_viz
 
 def visualize_Z(Z_path, kmeans_model, mode="dict"):
     Z = np.load(Z_path)
     Z_viz = quantize_Z(Z, kmeans_model, mode=mode)  
-    visualize_quantizedZ(Z_viz)
-    
+    visualize_quantizedZ(Z_viz)    
 
-def visualize_quantizedZ(Z_viz):
+def visualize_quantizedZ(Z_viz, prospect_flag=False):
     plt.figure(figsize=(18, 12), dpi=100)
     plt.yticks([])
     plt.xticks([])
     plt.axis('off')
-    plt.imshow(Z_viz, cmap=custom_cmap)
+    if prospect_flag == True:
+        maxmag = get_prospect_range(Z_viz)
+        print(maxmag)
+        plt.imshow(Z_viz, cmap=plt.get_cmap("bwr"), vmin=-maxmag, vmax=maxmag)
+        plt.colorbar() 
+    else:
+        plt.imshow(Z_viz, cmap=custom_cmap)
     plt.show()

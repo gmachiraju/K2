@@ -418,7 +418,6 @@ class K2Model():
         n = X.shape[0]
         doc_freq = np.count_nonzero(X, axis=0)
         idf = np.log(n / (1+doc_freq))
-
         tf = X / np.sum(X, axis=1).reshape(-1,1)
         X = tf * idf
         self.training_data = X
@@ -431,12 +430,12 @@ class K2Model():
         Output:
             g: vector representation of sprite
         """
-        # compute vector representation for sprite by performing hashing
-        Kk_weight = self.motif_graph_hash(S)
+        # compute vector representation for sprite
+        Kk_weight = self.motif_graph_weight(S)
         g = self.convert_motif2vec(Kk_weight)
         return g
 
-    def motif_graph_hash(self, S):
+    def motif_graph_weight(self, S):
         """
         Scan through sprite nodes and their neighborhoods to get a weighted motif graph
         Input:
@@ -483,10 +482,14 @@ class K2Model():
         if G is None:
             print("No G provided, showing model-wide kernel hash-graph")
             G = self.w_hgraph
+            logged = lambda x: np.log2(x)
+            print("Displaying motif graph with log2 scaling")
         else:
             # get sample-specific motif graph from map graph 
             S = self.construct_sprite(G)
-            G = self.motif_graph_hash(S)
+            G = self.motif_graph_weight(S)
+            logged = lambda x: np.log10(x)
+            print("Displaying motif graph with log10 scaling")
 
         pos = nx.circular_layout(G)
         colors = [node for node in list(G.nodes())]
@@ -496,16 +499,16 @@ class K2Model():
         n_size = []
         for nw in n_weights:
             ns = int(np.max([1, nw]))
-            ns = int(np.min([ns, 10]))
-            n_size.append(ns)
+            # ns = int(np.min([ns, 10])) # cap thickness to 10
+            n_size.append(logged(ns))
         nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=colors, cmap=CMAP, edgecolors='black')
 
         e_weights = nx.get_edge_attributes(G, 'e_weight').values()
         e_thickness = []
         for ew in e_weights:
             et = int(np.max([1, ew]))
-            et = int(np.min([et, 10]))
-            e_thickness.append(et)
+            # et = int(np.min([et, 10])) # cap thickness to 10
+            e_thickness.append(logged(et))
         nx.draw_networkx_edges(G, pos=pos, width=e_thickness, alpha=0.5)
         plt.draw()
     
@@ -526,13 +529,17 @@ class K2Model():
         edges.sort(key=lambda tup: (tup[0],tup[1]))
         sorted = nodes + edges
         return sorted
-        
+    
     def visualize_prospect_graph(self, P):
         """
         Inputs:
             P: prospect graph
         """
         utils.visualize_sprite(P, self.modality, prospect_flag=True)
+    
+    def visualize_prospect_map(self, P):
+        prospect_map = utils.convert_graph2arr(P)
+        utils.visualize_quantizedZ(prospect_map, prospect_flag=True)
     
     def construct_sprite(self, G):
         """
