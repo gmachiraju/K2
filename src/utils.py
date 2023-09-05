@@ -76,7 +76,7 @@ def construct_sprite(G, processor):
     S.graph.update({'d': 1})
     for node in S.nodes:
         embedding = S.nodes[node]['emb']
-        motif_label = processor.quantizer.predict(embedding)[0]
+        motif_label = processor.quantizer.predict(embedding.reshape(1, -1).astype(float))[0]
         S.nodes[node]['emb'] = motif_label
     return S
 
@@ -106,6 +106,11 @@ def visualize_sprite(G, modality="graph", prospect_flag=False):
     if type(colors[0]) != int:
         raise Exception("Error: Sprite detected as multi-channel when it should be single-channel and categorical. Please quantize the Datum's Map Graph.")
 
+    our_cmap = custom_cmap
+    if prospect_flag:
+        our_cmap = plt.get_cmap("bwr")
+        maxmag = get_prospect_range(G)
+        
     # for visualization, we scale the positions
     shape = "o"
     if modality == "image":
@@ -115,14 +120,15 @@ def visualize_sprite(G, modality="graph", prospect_flag=False):
         for k in spread_pos_dict.keys():
             spread_pos_dict[k] = (spread_pos_dict[k][1] * eps, -spread_pos_dict[k][0] * eps)
 
-    our_cmap = custom_cmap
+        pos = nx.spring_layout(G, pos=spread_pos_dict, fixed=spread_pos_dict.keys(), k=10, iterations=100)
+    elif modality == "graph":
+        pos = nx.kamada_kawai_layout(G)
+    
     if prospect_flag:
-        our_cmap = plt.get_cmap("bwr")
-        maxmag = get_prospect_range(G)
-
-    pos = nx.spring_layout(G, pos=spread_pos_dict, fixed=spread_pos_dict.keys(), k=10, iterations=100)
-    nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag)
-    plt.axis('off')    
+        nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag)
+    else:
+        nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap)
+    plt.axis('off')
     plt.draw()
 
 def convert_graph2arr(S):

@@ -29,6 +29,7 @@ class K2Processor():
     """
     def __init__(self, args):
         args = utils.dotdict(args)
+        self.datatype = args.datatype
         self.k = args.k
         self.quantizer_type = args.quantizer_type
         self.embeddings_path = args.embeddings_path
@@ -87,9 +88,9 @@ class K2Processor():
         """
         if self.embeddings_type == "dict":
             embed_dict = utils.deserialize(self.embeddings_path)
-            id_list = []
-            for k in embed_dict.keys():
-                id_list.append(k)
+            id_list = list(embed_dict.keys())
+            # for k in embed_dict.keys():
+            #     id_list.append(k)
             mapping_dict = {} # dummy
         elif self.embeddings_type == "memmap":
             embed_dict = np.memmap(self.embeddings_path, dtype='float32', mode='r', shape=(self.sample_size,1024)) # not an actual dict as you can see
@@ -108,7 +109,10 @@ class K2Processor():
         Also helps for visualization downstream.
         """
         # create df and partition by marker
-        ms = self.get_plot_markers()
+        if self.datatype == 'histo':
+            ms = self.get_plot_markers()
+        elif self.datatype == 'protein':
+            ms = self.get_residue_labels()
         ms_dict = dict(zip(self.id_list, ms))
         embed_df = pd.DataFrame.from_dict(ms_dict, orient='index', columns=["marker"])
         o_df = embed_df.loc[embed_df['marker'] == "o"] # 0-class
@@ -116,13 +120,13 @@ class K2Processor():
         X_df = embed_df.loc[embed_df['marker'] == "X"] # 1-class, salient
 
         # separate arrays and indices
-        array_o, self.idx_o = self.partition_by_marker(o_df)
+        array_o, self.idx_o = self.partition_by_marker(o_df) # idx_o is end index of 0 class
         array_x, self.idx_x = self.partition_by_marker(x_df)
         array_X, self.idx_X = self.partition_by_marker(X_df)
 
         # update indices of arrays
-        self.idx_x += self.idx_o
-        self.idx_X += self.idx_x
+        self.idx_x += self.idx_o # end index of x class
+        self.idx_X += self.idx_x # end index of X class 
 
         # concatenate arrays
         arrays = [array_o, array_x, array_X]
@@ -130,7 +134,7 @@ class K2Processor():
         if self.verbosity == "full":
             print("total embeds:", array.shape[0])
             print("collapsing from dim", array.shape[1], "--> 2")
-        return array
+        return array # (num_embeds, embed_dim)
 
     def get_plot_markers(self):
         """
@@ -155,6 +159,30 @@ class K2Processor():
             elif val == 0 and lab == "tumor":
                 m = "x"
             elif val == 1 and lab == "tumor":
+                sal_counter += 1
+                m = "X"
+            ms.append(m) # this is the case when so_dict is not passed in
+
+        print("sampled", str(sal_counter), "known salient objects!")
+        return ms
+    
+    def get_residue_labels(self):
+        """
+        Protein-specific labels
+        """
+        sal_counter = 0      
+
+        ms = []
+        for id_val in self.id_list:
+            pieces = id_val.split("_")
+            lab = int(pieces[0])
+            val = int(pieces[1])
+            
+            if val == 0 and lab == 0:
+                m = "o"
+            elif val == 0 and lab == 1:
+                m = "x"
+            elif val == 1 and lab == 1:
                 sal_counter += 1
                 m = "X"
             ms.append(m) # this is the case when so_dict is not passed in
@@ -244,7 +272,7 @@ class K2Model():
         self.variant = args.variant
         self.hparams = args.hparams
         self.train_graph_path = args.train_graph_path
-        self.train_label_dict = args.train_label_dict
+        # self.train_label_dict = args.train_label_dict
 
         if self.processor == None:
             raise Exception("Error: K2 Processor is not provided.")
@@ -281,12 +309,13 @@ class K2Model():
                 G_file = G_files[t]
                 # load map graph data
                 G = utils.deserialize(os.path.join(self.train_graph_path, G_file))
+                y.append(G.graph['label'])
                 # quantize and embed sprite
                 sprite = self.construct_sprite(G)
                 g = self.embed_sprite(sprite)
                 # store g-vector in array for training
                 X.append(g)
-                y.append(self.train_label_dict[G_file])
+                # y.append(self.train_label_dict[G_file])
                 pbar.set_description('processed: %d' % (1 + t))
                 pbar.update(1)
 
@@ -352,6 +381,7 @@ class K2Model():
         # split data into classes
         X = self.training_data
         y = self.labels.astype(int)
+        print(y)
         X0 = X[y==0,:]
         X1 = X[y==1,:]
         # compute mean vectors

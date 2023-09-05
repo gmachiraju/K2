@@ -1,4 +1,4 @@
-name: /home/envs
+name: k2
 channels:
   - huggingface
   - pytorch
@@ -259,7 +259,6 @@ dependencies:
       - anyio==3.6.2
       - attrs==22.2.0
       - charset-normalizer==3.1.0
-      - clip==1.0
       - cmake==3.26.0
       - dataclasses==0.6
       - datasets==2.11.0
@@ -346,4 +345,4 @@ dependencies:
       - xxhash==3.2.0
       - yacs==0.1.8
       - yarl==1.8.2
-prefix: /home/envs
+prefix: /oak/stanford/groups/rbaltman/aderry/miniconda3/envs/k2
