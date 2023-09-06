@@ -2,6 +2,7 @@ import numpy as np
 import networkx as nx
 import pickle
 import matplotlib.pyplot as plt
+import os
 CMAP="tab20"
 custom_cmap = plt.get_cmap(CMAP)
 custom_cmap.set_bad(color='white')
@@ -185,3 +186,26 @@ def visualize_quantizedZ(Z_viz, prospect_flag=False):
     else:
         plt.imshow(Z_viz, cmap=custom_cmap)
     plt.show()
+    
+#===========================================
+# utility functions for visualizing proteins
+#===========================================
+
+def load_structure(pdbc, pdb_dir='/scratch/users/aderry/pdb'):
+    from collapse import process_pdb
+    from atom3d.util.formats import df_to_bp
+    
+    pdb, chain = pdbc[:4], pdbc[-1]
+    fname = os.path.join(pdb_dir, pdb[1:3], f'pdb{pdb}.ent.gz')
+    df = process_pdb(fname, chain=chain, include_hets=False)
+    return df_to_bp(df)
+    
+def visualize_protein_sprite(sprite):
+    import nglview
+    from matplotlib.colors import rgb2hex
+    struct = load_structure(sprite.graph['id'])
+    color_resids = list(zip([rgb2hex(custom_cmap(x)) for x in nx.get_node_attributes(sprite, 'emb').values()], [x[1:] for x in nx.get_node_attributes(sprite, 'resid').values()]))
+    scheme = nglview.color._ColorScheme(color_resids, 'sprite')
+    view = nglview.show_biopython(struct, default_representation=False)
+    view.add_cartoon("protein", color=scheme)
+    return view

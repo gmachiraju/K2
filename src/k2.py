@@ -381,7 +381,6 @@ class K2Model():
         # split data into classes
         X = self.training_data
         y = self.labels.astype(int)
-        print(y)
         X0 = X[y==0,:]
         X1 = X[y==1,:]
         # compute mean vectors

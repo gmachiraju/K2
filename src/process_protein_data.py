@@ -87,7 +87,7 @@ if __name__ == '__main__':
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)
     
     train_embed_dict = {}
-    train_graph_dir = '../data/train_graphs'
+    train_graph_dir = f'../data/{args.metal}_train_graphs'
     os.makedirs(train_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(train_keyres.items(), 'train positive'):
@@ -112,7 +112,7 @@ if __name__ == '__main__':
             continue
         
         G = dict2graph(emb_data)
-        G.graph.update({'id': pdbc, 'label': 1})
+        G.graph.update({'id': pdbc, 'label': 0})
         serialize(G, os.path.join(train_graph_dir, f'{pdbc}.pkl'))
         
         for i in range(len(emb_data['embeddings'])):
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     serialize(train_embed_dict, f'../data/{args.metal}_train_embeddings.pkl')
     
     test_embed_dict = {}
-    test_graph_dir = '../data/test_graphs'
+    test_graph_dir = f'../data/{args.metal}_test_graphs'
     os.makedirs(test_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(test_keyres.items(), 'test positive'):
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         labels[np.isin(emb_data['resids'], pos_resids)] = 1
         
         G = dict2graph(emb_data)
-        G.graph.update({'id': pdbc, 'label': 0})
+        G.graph.update({'id': pdbc, 'label': 1})
         serialize(G, os.path.join(test_graph_dir, f'{pdbc}.pkl'))
 
         for i in range(len(emb_data['embeddings'])):
