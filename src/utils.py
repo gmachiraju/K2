@@ -126,7 +126,7 @@ def visualize_sprite(G, modality="graph", prospect_flag=False):
         pos = nx.kamada_kawai_layout(G)
     
     if prospect_flag:
-        nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag)
+        nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag, with_labels=True, labels=nx.get_node_attributes(G, 'resid'), font_size=6)
     else:
         nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap)
     plt.axis('off')
@@ -200,11 +200,18 @@ def load_structure(pdbc, pdb_dir='/scratch/users/aderry/pdb'):
     df = process_pdb(fname, chain=chain, include_hets=False)
     return df_to_bp(df)
     
-def visualize_protein_sprite(sprite):
+def visualize_protein_sprite(sprite, prospect_flag=False):
     import nglview
-    from matplotlib.colors import rgb2hex
+    from matplotlib.colors import rgb2hex, Normalize
+    
+    our_cmap = custom_cmap
+    if prospect_flag:
+        our_cmap = plt.get_cmap("bwr")
+        maxmag = get_prospect_range(sprite)
+        norm = Normalize(vmin=-maxmag, vmax=maxmag)
+        
     struct = load_structure(sprite.graph['id'])
-    color_resids = list(zip([rgb2hex(custom_cmap(x)) for x in nx.get_node_attributes(sprite, 'emb').values()], [x[1:] for x in nx.get_node_attributes(sprite, 'resid').values()]))
+    color_resids = list(zip([rgb2hex(our_cmap(norm(x))) for x in nx.get_node_attributes(sprite, 'emb').values()], [x[1:] for x in nx.get_node_attributes(sprite, 'resid').values()]))
     scheme = nglview.color._ColorScheme(color_resids, 'sprite')
     view = nglview.show_biopython(struct, default_representation=False)
     view.add_cartoon("protein", color=scheme)

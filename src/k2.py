@@ -69,6 +69,24 @@ class K2Processor():
         """
         raise NotImplementedError
     
+    def split_embeddings(self, embeddings=None, labels=None):
+        if embeddings is None:
+            embeddings = self.embedding_array.copy()
+        if labels is None:
+            labels = self.quantizer.labels_.copy()
+            
+        embedded_o = self.embedding_array[0:self.idx_o,:]
+        labels_o = labels[0:self.idx_o]
+        embedded_x = self.embedding_array[self.idx_o:self.idx_x,:]
+        labels_x = labels[self.idx_o:self.idx_x]
+        if self.idx_X == 0:
+            embedded_X = self.embedding_array[self.idx_x:,:]
+            labels_X = labels[self.idx_x:]
+        else:
+            embedded_X = self.embedding_array[self.idx_x:self.idx_X,:]
+            labels_X = labels[self.idx_x:self.idx_X]
+        return embedded_o, labels_o, embedded_x, labels_x, embedded_X, labels_X
+    
     def fit_quantizer(self):
         """
         Fits quantizer to use for the embedding space (e.g. sklearn k-means model)
@@ -203,36 +221,48 @@ class K2Processor():
         idx_mark = len(embeds_list_mark)
         return array_mark, idx_mark
         
-    def visualize_quantizer(self):
+    def visualize_quantizer(self, subsample=None):
+        """visualize quantizer labels (clusters) in tSNE reduced-dim space
+
+        :param subsample: if provided, subsample negative elements to this number, defaults to None
+        :type subsample: int, optional
+
+        """
         if self.quantizer is None:
             raise Exception("Error: quantizer is not fitted.")
 
+        if subsample:
+            if self.verbosity == "full":
+                print(f'subsampling negative elements to n={subsample}')
+            embedded_o, labels_o, embedded_x, labels_x, embedded_X, labels_X = self.split_embeddings()
+            sample_o = np.random.choice(embedded_o.shape[0], subsample // 2, replace=False)
+            embedded_o = embedded_o[sample_o,:]
+            labels_o = labels_o[sample_o]
+            sample_x = np.random.choice(embedded_x.shape[0], subsample // 2, replace=False)
+            embedded_x = embedded_x[sample_x,:]
+            labels_x = labels_x[sample_x]
+            embedding_array = np.vstack([embedded_o, embedded_x, embedded_X])
+            cluster_labs = np.hstack([labels_o, labels_x, labels_X])
+        else:
+            embedding_array = self.embedding_array.copy()
+            cluster_labs = self.quantizer.labels_.copy()
+
         # tsne - color by source
         for perplexity in [5,10,20]:
-            embedded = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=perplexity).fit_transform(self.embedding_array)
+            tsne = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=perplexity).fit_transform(embedding_array)
             if self.verbosity == "full":
                 fig, ax1 = plt.subplots(1, 1)
                 fig.suptitle('Sampled embeddings for cluster assignment')
                 ax1.set_xlabel("tSNE-0")
                 ax1.set_ylabel("tSNE-1")
 
-            cluster_labs = self.quantizer.labels_
             if self.verbosity == "full":
                 ax1.set_xlabel("tSNE-0")
                 ax1.set_title("t-SNE with K="+str(self.k)+" clusters (perplexity="+str(perplexity)+")")
-                embedded_o = embedded[0:self.idx_o,:]
-                embedded_x = embedded[self.idx_o:self.idx_x,:]
-                if self.idx_X == 0:
-                    embedded_X = embedded[self.idx_x:,:]
-                else:
-                    embedded_X = embedded[self.idx_x:self.idx_X,:]
                 
-                ax1.scatter(embedded_o[:,0], embedded_o[:,1], c=cluster_labs[0:self.idx_o], alpha=0.3, s=5, marker="o", cmap="Dark2")
-                ax1.scatter(embedded_x[:,0], embedded_x[:,1], c=cluster_labs[self.idx_o:self.idx_x], alpha=0.3, s=30, marker="x", cmap="Dark2")
-                if self.idx_X == 0:
-                    ax1.scatter(embedded_X[:,0], embedded_X[:,1], c=cluster_labs[self.idx_x:], alpha=0.6, s=300, edgecolors="k", marker="X", cmap="Dark2") 
-                else:
-                    ax1.scatter(embedded_X[:,0], embedded_X[:,1], c=cluster_labs[self.idx_x:self.idx_X], alpha=0.6, s=300, edgecolors="k", marker="X", cmap="Dark2") 
+                ax1.scatter(tsne[:len(embedded_o),0], tsne[:len(embedded_o),1], c=labels_o, alpha=0.3, s=5, marker="o", cmap="Dark2")
+                ax1.scatter(tsne[len(embedded_o):len(embedded_o)+len(embedded_x),0], tsne[len(embedded_o):len(embedded_o)+len(embedded_x),1], c=labels_x, alpha=0.3, s=30, marker="x", cmap="Dark2")
+                ax1.scatter(tsne[len(embedded_o)+len(embedded_x):,0], tsne[len(embedded_o)+len(embedded_x):,1], c=labels_X, alpha=0.6, s=300, edgecolors="k", marker="X", cmap="Dark2") 
                 
         unique, counts = np.unique(cluster_labs, return_counts=True)
         if self.verbosity == "full":
@@ -419,6 +449,12 @@ class K2Model():
         # reset P's nodes to 0 
         for node in P.nodes:
             P.nodes[node]['emb'] = 0.0
+        
+        # for n in self.w_hgraph.nodes:
+        #     print(n, self.w_hgraph.nodes[n]['n_weight'])
+        # for e in self.w_hgraph.edges:
+        #     print(e, self.w_hgraph.edges[e]['e_weight'])
+            
         # nonlinear convolve with hashmap
         for node in S.nodes:
             node_motif = S.nodes[node]['emb']
@@ -429,9 +465,11 @@ class K2Model():
 
             # load node presence in weighted graph
             P.nodes[node]['emb'] += self.w_hgraph.nodes[node_motif]["n_weight"]
+            # print(node_motif, self.w_hgraph.nodes[node_motif]["n_weight"])
             # load in edge presence in weighted graph (skipgrams)
             for idx, u in enumerate(unique):
                 P.nodes[node]['emb'] += (self.w_hgraph.edges[(node_motif,u)]["e_weight"] * counts[idx])
+                # print((node_motif,u), self.w_hgraph.edges[(node_motif,u)]["e_weight"])
         
         # return prospect map P w/ class-differential nodes
         return P
@@ -503,7 +541,7 @@ class K2Model():
         vec = np.array([vec[key] for key in self.hash_keys])
         return vec
 
-    def visualize_motif_graph(self, G=None):
+    def visualize_motif_graph(self, G=None, labels=False):
         """
         Inputs:
             G: networkx map graph
@@ -512,6 +550,7 @@ class K2Model():
             print("No G provided, showing model-wide kernel hash-graph")
             G = self.w_hgraph
             logged = lambda x: np.log2(x)
+            
             print("Displaying motif graph with log2 scaling")
         else:
             # get sample-specific motif graph from map graph 
@@ -531,14 +570,22 @@ class K2Model():
             # ns = int(np.min([ns, 10])) # cap thickness to 10
             n_size.append(logged(ns))
         nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=colors, cmap=CMAP, edgecolors='black')
+        if labels:
+            nx.draw_networkx_labels(G, pos)
 
-        e_weights = nx.get_edge_attributes(G, 'e_weight').values()
+        e_weights = list(nx.get_edge_attributes(G, 'e_weight').values())
+        e_sign = np.sign(e_weights)
+        e_cmap = {-1.: "blue", 1.: "red", 0.: "black"}
+        e_colors = [e_cmap[sign] for sign in e_sign]
+        max_wt = np.max(e_weights)
+        # print(nx.get_edge_attributes(G, 'e_weight'))
         e_thickness = []
         for ew in e_weights:
-            et = int(np.max([1, ew]))
+            # et = int(np.max([1, ew]))
             # et = int(np.min([et, 10])) # cap thickness to 10
-            e_thickness.append(logged(et))
-        nx.draw_networkx_edges(G, pos=pos, width=e_thickness, alpha=0.5)
+            # e_thickness.append(logged(et))
+            e_thickness.append(ew / max_wt)
+        nx.draw_networkx_edges(G, pos=pos, width=e_thickness, alpha=0.5, edge_color=e_colors)
         plt.draw()
     
     def sort_keys(self, key_list):
