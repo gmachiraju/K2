@@ -3,10 +3,14 @@ import networkx as nx
 import pickle
 import matplotlib.pyplot as plt
 import os
+import pdb
 CMAP="tab20"
 custom_cmap = plt.get_cmap(CMAP)
 custom_cmap.set_bad(color='white')
 
+#================================================================
+# General functions for saving/loading data
+#----------------------------------------------------------------
 class dotdict(dict):
     """
     dot.notation access to dictionary attributes
@@ -24,7 +28,91 @@ def serialize(obj, path):
 def deserialize(path):
     with open(path, 'rb') as fh:
         return pickle.load(fh)
+    
+#================================================================
+# useful transformations
+#----------------------------------------------------------------
+def linearize_graph(G):
+    """
+    Converts graph to datum vector. Useful for prospect analysis.
+    Inputs:
+        P: networkx prospect graph
+    """
+    vec = {}
+    for node in G.nodes:
+        vec[node] = G.nodes[node]['emb'] # value of prospect graph
+    sorted_keys = sorted(vec.keys()) # can inspect
+    vec = np.array([vec[key] for key in sorted_keys]) # enforcing ordering of linear index
+    return vec
 
+def rescale_graph(G):
+    """
+    Min-max scaling to [0,1]. Helpful for importance values of K2 graph
+    Inputs: 
+        G: Graph with real-valued node attributes
+    Outputs:
+        R: rescaled version of G
+    """
+    R = G.copy()
+    vals = {}
+    for node in G.nodes:
+        vals[node] = G.nodes[node]['emb']
+    sorted_keys = sorted(vals.keys()) # can inspect
+    val_vec = np.array([vals[key] for key in sorted_keys]) # enforcing ordering of linear index
+    rescaled_vals = rescale_vec(val_vec)
+    for idx, node in enumerate(R.nodes):
+        R.nodes[node]['emb'] = rescaled_vals[idx]
+    return R
+
+def binarize_graph(G, thresh, conditional=None):
+    """
+    Binarize graph based on threshold
+    Inputs:
+        G: Graph with real-valued node attributes
+        thresh: threshold value
+    Outputs:
+        B: binarized version of G
+    """
+    B = G.copy()
+    vals = {}
+    for node in G.nodes:
+        vals[node] = G.nodes[node]['emb']
+    sorted_keys = sorted(vals.keys()) # can inspect
+    val_vec = np.array([vals[key] for key in sorted_keys]) # enforcing ordering of linear index
+    binarized_vals = binarize_vec(val_vec, thresh, conditional=conditional)
+    for idx, node in enumerate(B.nodes):
+        B.nodes[node]['emb'] = binarized_vals[idx]
+    return B
+
+def rescale_vec(vec):
+    """
+    Min-max scaling to [0,1]. Helpful for importance values of K2 graph
+    Inputs: 
+        vec: vector of importance values
+    """
+    vec = vec.astype(float)
+    return (vec - np.min(vec)) / (np.max(vec) - np.min(vec))
+
+def binarize_vec(vec, thresh, conditional=None):
+    if conditional == "<":
+        return np.where(vec < thresh, 1, 0)
+    return np.where(vec > thresh, 1, 0)
+
+def compute_adaptive_thresh_graph(P):
+    # Adaptive threshold like Borji et al / Achanta et al
+    # t = (2 / (num_els)) * sum(P)
+    val_summation = np.sum(list(nx.get_node_attributes(P, 'emb').values()))
+    return (2 / P.number_of_nodes()) * val_summation
+
+def compute_adaptive_thresh_vec(vec):
+    # Adaptive threshold like Borji et al / Achanta et al
+    # t = (2 / (num_els)) * sum(vec)
+    val_summation = np.sum(vec)
+    return (2 / len(vec)) * val_summation
+
+#================================================================
+# Data processing functions
+#----------------------------------------------------------------
 def convert_arr2graph(Z):
     """
     Convert embedded image (Array of embeddings) to map graph
@@ -68,6 +156,21 @@ def convert_arr2graph(Z):
     G.graph.update({'pos_dict': lin2grid_map})
     return G
 
+def convert_arr2graph_gt(gt, G):
+    """
+    gt: ground truth array
+    G: map graph
+    """
+    G_gt = G.copy()
+    for node in G_gt.nodes():
+        i,j = G_gt.nodes[node]['pos']
+        if gt is not None: # class-1
+            G_gt.nodes[node]['emb'] = int(gt[i,j])
+            # print("gt[i,j]:", gt[i,j])
+        else:
+            G_gt.nodes[node]['emb'] = 0 # class-0: ground truth is all zeros
+    return G_gt
+
 def construct_sprite(G, processor):
     """
     Takes a Map Graph G and constructs a sprite from it by applying an embedding quantizer
@@ -99,11 +202,17 @@ def get_prospect_range(P):
     maxmag = np.max([np.abs(minP), np.abs(maxP)])
     return maxmag
 
-def visualize_sprite(G, modality="graph", prospect_flag=False):
+def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, checking_flag=False):
     # Visualize sprite
     plt.figure()
     colors = list(nx.get_node_attributes(G, 'emb').values())
-    colors = [int(c) for c in colors]
+    if checking_flag:
+        colors = [1 for c in colors]
+    else:
+        colors = [int(c) for c in colors]
+
+    print("colors (min, max):", np.min(colors), np.max(colors))
+    
     if type(colors[0]) != int:
         raise Exception("Error: Sprite detected as multi-channel when it should be single-channel and categorical. Please quantize the Datum's Map Graph.")
 
@@ -111,6 +220,10 @@ def visualize_sprite(G, modality="graph", prospect_flag=False):
     if prospect_flag:
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(G)
+    if gt_flag:
+        our_cmap = plt.get_cmap("bone")
+    if checking_flag:
+        our_cmap = plt.get_cmap("jet")
         
     # for visualization, we scale the positions
     shape = "o"

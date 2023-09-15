@@ -272,7 +272,12 @@ class K2Model():
         self.variant = args.variant
         self.hparams = args.hparams
         self.train_graph_path = args.train_graph_path
-        # self.train_label_dict = args.train_label_dict
+
+        # allows for labels to be stored in Graphs or loaded as a dictionary
+        if "train_label_dict" in args.keys():
+            self.train_label_dict = args.train_label_dict
+        else:
+            self.train_label_dict = None
 
         if self.processor == None:
             raise Exception("Error: K2 Processor is not provided.")
@@ -309,7 +314,13 @@ class K2Model():
                 G_file = G_files[t]
                 # load map graph data
                 G = utils.deserialize(os.path.join(self.train_graph_path, G_file))
-                y.append(G.graph['label'])
+                
+                # load in labels
+                if self.train_label_dict is None:
+                    y.append(G.graph['label'])
+                else:
+                    y.append(self.train_label_dict[G_file])
+
                 # quantize and embed sprite
                 sprite = self.construct_sprite(G)
                 g = self.embed_sprite(sprite)
@@ -368,6 +379,7 @@ class K2Model():
 
         y = self.labels.astype(int)
         model = model.fit(X, y)
+        self.classifier = model # storing classifier for test set classification
         self.B = model.coef_[0] # importance weights
 
     def train_inferential_k2(self):
@@ -405,6 +417,7 @@ class K2Model():
                 sig_mask.append(1)
 
         self.B = log2fc * np.array(sig_mask)
+        self.classifier = None # no classification capability
     
     def prospect(self, G):
         """
