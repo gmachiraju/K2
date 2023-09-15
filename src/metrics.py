@@ -2,8 +2,9 @@ import numpy as np
 import networkx as nx
 from sklearn.metrics import precision_recall_curve, auc, average_precision_score
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import confusion_matrix
 
-def confusion_matrix(a,b):
+def confusion(a,b):
     """
     Computes a unraveled confusion matrix from two binary vectors.
     Inputs:

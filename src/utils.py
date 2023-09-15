@@ -281,8 +281,17 @@ def quantize_Z(Z, kmeans_model, mode="dict"):
                 idx += 1
     return Z_viz
 
-def visualize_Z(Z_path, kmeans_model, mode="dict"):
+def crop_Z(clinical_id, Z, crop_dict):
+    i0, i1 = crop_dict[clinical_id][0]
+    j0, j1 = crop_dict[clinical_id][1]
+    print("crop coords:", crop_dict[clinical_id])
+    Z_crop = Z[i0:i1, j0:j1, :]
+    return Z_crop
+
+def visualize_Z(Z_path, crop_dict, kmeans_model, mode="dict"):
     Z = np.load(Z_path)
+    clinical_id = Z_path.split("/")[-1].split(".")[0].split("-")[1]
+    Z = crop_Z(clinical_id, Z, crop_dict)
     Z_viz = quantize_Z(Z, kmeans_model, mode=mode)  
     visualize_quantizedZ(Z_viz)    
 

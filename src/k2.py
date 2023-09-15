@@ -254,14 +254,25 @@ class K2Processor():
         # tsne - color by source
         for perplexity in [5,10,20]:
             tsne = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=perplexity).fit_transform(embedding_array)
+            if not subsample:
+                embedded_o = tsne[0:self.idx_o,:]
+                embedded_x = tsne[self.idx_o:self.idx_x,:]
+                if self.idx_X == 0:
+                    embedded_X = tsne[self.idx_x:,:]
+                else:
+                    embedded_X = tsne[self.idx_x:self.idx_X,:]
+                labels_o = cluster_labs[0:self.idx_o]
+                labels_x = cluster_labs[self.idx_o:self.idx_x]
+                if self.idx_X == 0:
+                    labels_X = cluster_labs[self.idx_x:]
+                else:
+                    labels_X = cluster_labs[self.idx_x:self.idx_X]
+            
             if self.verbosity == "full":
                 fig, ax1 = plt.subplots(1, 1)
                 fig.suptitle('Sampled embeddings for cluster assignment')
                 ax1.set_xlabel("tSNE-0")
                 ax1.set_ylabel("tSNE-1")
-
-            if self.verbosity == "full":
-                ax1.set_xlabel("tSNE-0")
                 ax1.set_title("t-SNE with K="+str(self.k)+" clusters (perplexity="+str(perplexity)+")")
                 
                 ax1.scatter(tsne[:len(embedded_o),0], tsne[:len(embedded_o),1], c=labels_o, alpha=0.3, s=5, marker="o", cmap="Dark2")
@@ -571,11 +582,12 @@ class K2Model():
         Inputs:
             G: networkx map graph
         """
+        model_flag = False
         if G is None:
             print("No G provided, showing model-wide kernel hash-graph")
             G = self.w_hgraph
             logged = lambda x: np.log2(x)
-            
+            model_flag = True
             print("Displaying motif graph with log2 scaling")
         else:
             # get sample-specific motif graph from map graph 
@@ -610,6 +622,8 @@ class K2Model():
             # et = int(np.min([et, 10])) # cap thickness to 10
             # e_thickness.append(logged(et))
             e_thickness.append(ew / max_wt)
+        if model_flag == False:
+            e_colors = ["black" for el in e_colors] # keep bacl lines for datum motif graph
         nx.draw_networkx_edges(G, pos=pos, width=e_thickness, alpha=0.5, edge_color=e_colors)
         plt.draw()
     
