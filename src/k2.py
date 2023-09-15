@@ -233,14 +233,18 @@ class K2Processor():
 
         if subsample:
             if self.verbosity == "full":
-                print(f'subsampling negative elements to n={subsample}')
+                print(f'subsampling elements to {subsample*100} %')
             embedded_o, labels_o, embedded_x, labels_x, embedded_X, labels_X = self.split_embeddings()
-            sample_o = np.random.choice(embedded_o.shape[0], subsample // 2, replace=False)
+            print(f'num o: {int(embedded_o.shape[0] * subsample)}, num x: {int(embedded_x.shape[0] * subsample)}, num X: {int(embedded_X.shape[0] * subsample)}')
+            sample_o = np.random.choice(embedded_o.shape[0], int(embedded_o.shape[0] * subsample), replace=False)
             embedded_o = embedded_o[sample_o,:]
             labels_o = labels_o[sample_o]
-            sample_x = np.random.choice(embedded_x.shape[0], subsample // 2, replace=False)
+            sample_x = np.random.choice(embedded_x.shape[0], int(embedded_x.shape[0] * subsample), replace=False)
             embedded_x = embedded_x[sample_x,:]
             labels_x = labels_x[sample_x]
+            sample_X = np.random.choice(embedded_X.shape[0], int(embedded_X.shape[0] * subsample), replace=False)
+            embedded_X = embedded_X[sample_X,:]
+            labels_X = labels_X[sample_X]
             embedding_array = np.vstack([embedded_o, embedded_x, embedded_X])
             cluster_labs = np.hstack([labels_o, labels_x, labels_X])
         else:
@@ -356,16 +360,24 @@ class K2Model():
         print("Number of training examples:", n)
         print("Number of Kk features:", p)
 
-    def fit_kernel(self, normalize_flag=True):
+    def fit_kernel(self, normalize_flag=True, alpha=None, tau=None):
         """
         Main method for training K2 model
         Inputs:
             normalize_flag: a boolean T/F value to toggle TF-IDF normalization
+            alpha: optionally override alpha hyperparameter attribute for fitting
+            tau: optionally override tau hyperparameter attribute for fitting
         """
         # tfidf scaling
         if normalize_flag == True:
             print("Normalizing training data with TF-IDF...")
             self.tfidf()
+        if alpha is not None:
+            print(f'updating alpha to {alpha}')
+            self.hparams['alpha'] = alpha
+        if tau is not None:
+            print(f'updating tau to {tau}')
+            self.hparams['tau'] = tau
 
         if self.variant == "predictive":
             self.train_predictive_k2()
@@ -574,7 +586,7 @@ class K2Model():
             nx.draw_networkx_labels(G, pos)
 
         e_weights = list(nx.get_edge_attributes(G, 'e_weight').values())
-        e_sign = np.sign(e_weights)
+        e_sign = np.sign(list(nx.get_edge_attributes(self.w_hgraph, 'e_weight').values()))
         e_cmap = {-1.: "blue", 1.: "red", 0.: "black"}
         e_colors = [e_cmap[sign] for sign in e_sign]
         max_wt = np.max(e_weights)
