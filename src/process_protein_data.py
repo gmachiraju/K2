@@ -110,12 +110,14 @@ def embed_pdb(encoder, pdb_chain, pdb_dir, model, device, r):
     outdata['adj'] = compute_adjacency(atom_df.copy(), outdata['resids'], r)
     return outdata
 
-def dict2graph(emb_data):
+def dict2graph(emb_data, labels=None):
+    if labels is None:
+        labels = np.zeros(len(emb_data['resids']))
     adj = csr_array((np.ones(emb_data['adj'].shape[1]), (emb_data['adj'][0], emb_data['adj'][1])), shape=(len(emb_data['resids']), len(emb_data['resids'])))
     G = nx.from_scipy_sparse_array(adj)
     G.graph.update({'d': emb_data['embeddings'].shape[1]})
     
-    node_attr = {i: {'resid': emb_data['resids'][i], 'emb': emb_data['embeddings'][i]} for i in range(len(emb_data['resids']))}
+    node_attr = {i: {'resid': emb_data['resids'][i], 'emb': emb_data['embeddings'][i], 'gt': labels[i]} for i in range(len(emb_data['resids']))}
     nx.set_node_attributes(G, node_attr)
     return G
 
@@ -142,7 +144,7 @@ if __name__ == '__main__':
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)
     
     train_embed_dict = {}
-    train_graph_dir = f'../data/{args.encoder}/{args.metal}_train_graphs'
+    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs'
     os.makedirs(train_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(train_keyres.items(), 'train positive'):
@@ -154,7 +156,7 @@ if __name__ == '__main__':
         pos_resids = [atom_info.aa_to_letter(i.split('_')[0]) + i.split('_')[1] for i in res]
         labels[np.isin(emb_data['resids'], pos_resids)] = 1
         
-        G = dict2graph(emb_data)
+        G = dict2graph(emb_data, labels)
         G.graph.update({'id': pdbc, 'label': 1})
         serialize(G, os.path.join(train_graph_dir, f'{pdbc}.pkl'))
         
@@ -175,10 +177,10 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             train_embed_dict[key] = emb_data['embeddings'][i]
     
-    serialize(train_embed_dict, f'../data/{args.encoder}/{args.metal}_train_embeddings.pkl')
+    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings.pkl')
     
     test_embed_dict = {}
-    test_graph_dir = f'../data/{args.encoder}/{args.metal}_test_graphs'
+    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs'
     os.makedirs(test_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(test_keyres.items(), 'test positive'):
@@ -189,7 +191,7 @@ if __name__ == '__main__':
         pos_resids = [atom_info.aa_to_letter(i.split('_')[0]) + i.split('_')[1] for i in res]
         labels[np.isin(emb_data['resids'], pos_resids)] = 1
         
-        G = dict2graph(emb_data)
+        G = dict2graph(emb_data, labels)
         G.graph.update({'id': pdbc, 'label': 1})
         serialize(G, os.path.join(test_graph_dir, f'{pdbc}.pkl'))
 
@@ -210,5 +212,5 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             test_embed_dict[key] = emb_data['embeddings'][i].astype('float')
     
-    serialize(test_embed_dict, f'../data/{args.encoder}/{args.metal}_test_embeddings.pkl')
+    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings.pkl')
     
