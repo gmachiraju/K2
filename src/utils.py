@@ -1,6 +1,7 @@
 import numpy as np
 import networkx as nx
 import pickle
+import dill
 import matplotlib.pyplot as plt
 import os
 import pdb
@@ -28,6 +29,15 @@ def serialize(obj, path):
 def deserialize(path):
     with open(path, 'rb') as fh:
         return pickle.load(fh)
+    
+def serialize_model(obj, path):
+    with open(path, 'wb') as fh:
+        return dill.dump(obj, fh)
+
+def deserialize_model(path):
+    with open(path, 'rb') as fh:
+        return dill.load(fh)
+
     
 #================================================================
 # useful transformations

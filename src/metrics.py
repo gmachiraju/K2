@@ -152,4 +152,6 @@ def msd(P):
     cardinalities = []
     for C in ccs:
         cardinalities.append(C.number_of_nodes())
+    if len(cardinalities) == 0:
+        return 0
     return np.mean(cardinalities) / len(ccs)

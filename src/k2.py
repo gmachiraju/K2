@@ -29,6 +29,7 @@ class K2Processor():
     """
     def __init__(self, args):
         args = utils.dotdict(args)
+        self.fitted_flag = False
         self.datatype = args.datatype
         self.k = args.k
         self.quantizer_type = args.quantizer_type
@@ -93,12 +94,13 @@ class K2Processor():
         """
         if self.quantizer_type == "kmeans":
             print("Chosen KMeans model for quantization...")
-            model = KMeans(n_clusters=self.k, random_state=0)
+            model = KMeans(n_clusters=self.k, random_state=0, n_init=10) # 10 is default
         else:
             raise NotImplementedError
         
         self.embedding_array = self.load_embeddings()
         self.quantizer = model.fit(self.embedding_array)
+        self.fitted_flag = True
 
     def load_embeddings(self):
         """
@@ -311,12 +313,17 @@ class K2Model():
     """
     def __init__(self, args):
         args = utils.dotdict(args)
+        self.fitted_flag = False
         self.modality = args.modality # graph, image 
         self.processor = args.processor
         self.r = args.r
         self.variant = args.variant
         self.hparams = args.hparams
         self.train_graph_path = args.train_graph_path
+        # add verbosity flag!
+
+        if "verbosity_flag" not in args.keys():
+            self.verbosity_flag = "low"
 
         # allows for labels to be stored in Graphs or loaded as a dictionary
         if "train_label_dict" in args.keys():
@@ -324,13 +331,13 @@ class K2Model():
         else:
             self.train_label_dict = None
 
-        if self.processor == None:
+        if self.processor == None or "processor" not in args.keys():
             raise Exception("Error: K2 Processor is not provided.")
         self.k = self.processor.k
         self.quantizer = self.processor.quantizer
         
         # now construct data structures
-        self.Kk_unweight = self.processor.motif_graph
+        self.Kk_unweight = self.processor.motif_graph.copy()
         self.Kk_pruning() # only runs if r=0
         self.description = self.variant + "-" + self.processor.quantizer_type + "-" + str(self.k) + "-" + str(self.hparams)
         self.class_graphs = [] # where we load mean graphs per class
@@ -340,9 +347,8 @@ class K2Model():
             # prune edges, including self-edges
             for edge in self.Kk_unweight.edges:
                 self.Kk_unweight.remove_edge(edge[0], edge[1])
-
-            print("Note: r=0, so pruned Kk to k nodes only")    
-            print(self.Kk_unweight)
+            # print("Note: r=0, so pruned Kk to k nodes only")    
+            # print(self.Kk_unweight)
 
         # create a sorted ordering for hashmap keys
         key_list = [node for node in self.Kk_unweight.nodes] + [edge for edge in self.Kk_unweight.edges]
@@ -354,35 +360,35 @@ class K2Model():
         """
         X,y = [],[]
         G_files = os.listdir(self.train_graph_path)
-        with tqdm(total=len(G_files), desc="Creating K2 training array...") as pbar:
-            for t in range(len(G_files)):
-                G_file = G_files[t]
-                # load map graph data
-                G = utils.deserialize(os.path.join(self.train_graph_path, G_file))
-                
-                # load in labels
-                if self.train_label_dict is None:
-                    y.append(G.graph['label'])
-                else:
-                    y.append(self.train_label_dict[G_file])
+        # with tqdm(total=len(G_files), desc="Creating K2 training array...") as pbar:
+        for t, G_file in enumerate(G_files):
+            # load map graph data
+            G = utils.deserialize(os.path.join(self.train_graph_path, G_file))
+            
+            # load in labels
+            if self.train_label_dict is None:
+                y.append(G.graph['label'])
+            else:
+                y.append(self.train_label_dict[G_file])
 
-                # quantize and embed sprite
-                sprite = self.construct_sprite(G)
-                g = self.embed_sprite(sprite)
-                # store g-vector in array for training
-                X.append(g)
-                # y.append(self.train_label_dict[G_file])
-                pbar.set_description('processed: %d' % (1 + t))
-                pbar.update(1)
+            # quantize and embed sprite
+            sprite = self.construct_sprite(G)
+            g = self.embed_sprite(sprite)
+            # store g-vector in array for training
+            X.append(g)
+            # y.append(self.train_label_dict[G_file])
+            # pbar.set_description('processed: %d' % (1 + t))
+            # pbar.update(1)
 
         self.training_data = np.vstack(X)
         n,p = self.training_data.shape
         self.labels = np.array(y)
-        print("Complete! Created a training array for few-shot classification...")
-        print("Number of training examples:", n)
-        print("Number of Kk features:", p)
+        if self.verbosity_flag == "full":
+            print("Complete! Created a training array for few-shot classification...")
+            print("Number of training examples:", n)
+            print("Number of Kk features:", p)
 
-    def fit_kernel(self, normalize_flag=True, alpha=None, tau=None):
+    def fit_kernel(self, normalize_flag=True, alpha=None, tau=None, lam=None):
         """
         Main method for training K2 model
         Inputs:
@@ -392,7 +398,8 @@ class K2Model():
         """
         # tfidf scaling
         if normalize_flag == True:
-            print("Normalizing training data with TF-IDF...")
+            if self.verbosity_flag == "full":
+                print("Normalizing training data with TF-IDF...")
             self.tfidf()
         if alpha is not None:
             print(f'updating alpha to {alpha}')
@@ -400,6 +407,9 @@ class K2Model():
         if tau is not None:
             print(f'updating tau to {tau}')
             self.hparams['tau'] = tau
+        if lam is not None:
+            print(f'updating tau to {lam}')
+            self.hparams['lambda'] = lam
 
         if self.variant == "predictive":
             self.train_predictive_k2()
@@ -426,7 +436,8 @@ class K2Model():
         X = self.training_data
 
         if scaling_flag == True:
-            print("performing standard scaling beforehand...")
+            if self.verbosity_flag == "full":
+                print("performing standard scaling beforehand...")
             scaler = StandardScaler()
             X = scaler.fit_transform(X)
 
@@ -493,19 +504,20 @@ class K2Model():
             
         # nonlinear convolve with hashmap
         for node in S.nodes:
-            node_motif = S.nodes[node]['emb']
-            subgraph = nx.ego_graph(S, node, radius=self.r) 
-            neighbors = list(subgraph.nodes())
-            nhbr_motifs = [S.nodes[n]['emb'] for n in neighbors]
-            unique, counts = np.unique(nhbr_motifs, return_counts=True)
-
             # load node presence in weighted graph
+            node_motif = S.nodes[node]['emb']
             P.nodes[node]['emb'] += self.w_hgraph.nodes[node_motif]["n_weight"]
-            # print(node_motif, self.w_hgraph.nodes[node_motif]["n_weight"])
-            # load in edge presence in weighted graph (skipgrams)
-            for idx, u in enumerate(unique):
-                P.nodes[node]['emb'] += (self.w_hgraph.edges[(node_motif,u)]["e_weight"] * counts[idx])
-                # print((node_motif,u), self.w_hgraph.edges[(node_motif,u)]["e_weight"])
+
+            if self.r > 0:
+                # load in edge presence in weighted graph (skipgrams)
+                subgraph = nx.ego_graph(S, node, radius=self.r) 
+                neighbors = list(subgraph.nodes())
+                nhbr_motifs = [S.nodes[n]['emb'] for n in neighbors]
+                unique, counts = np.unique(nhbr_motifs, return_counts=True) 
+                # print(node_motif, self.w_hgraph.nodes[node_motif]["n_weight"])
+                for idx, u in enumerate(unique):
+                    P.nodes[node]['emb'] += (self.w_hgraph.edges[(node_motif,u)]["e_weight"] * counts[idx])
+                    # print((node_motif,u), self.w_hgraph.edges[(node_motif,u)]["e_weight"])
         
         # return prospect map P w/ class-differential nodes
         return P
@@ -547,19 +559,23 @@ class K2Model():
             Kk_weight: weighted motif graph
         """
         Kk_weight = self.Kk_unweight.copy()
-        # Iterate through nodes in natural ordering
+        # Iterate through nodes in natural ordering -- or should we iterate by linear index? 
+        # # K2 should be deterministic though
         for node in S.nodes:
-            node_motif = S.nodes[node]['emb']
-            subgraph = nx.ego_graph(S, node, radius=self.r) 
-            neighbors = list(subgraph.nodes())
-            nhbr_motifs = [S.nodes[n]['emb'] for n in neighbors]
-            unique, counts = np.unique(nhbr_motifs, return_counts=True)
-            
             # load node presence in weighted graph
+            node_motif = S.nodes[node]['emb']
             Kk_weight.nodes[node_motif]['n_weight'] += 1
-            # load in edge presence in weighted graph (skipgrams)
-            for idx, u in enumerate(unique):
-                Kk_weight.edges[(node_motif,u)]['e_weight'] += counts[idx]
+            # load edge presence in weighted graph (skipgrams)
+            if self.r > 0:
+                subgraph = nx.ego_graph(S, node, radius=self.r) 
+                neighbors = list(subgraph.nodes())
+                nhbr_motifs = [S.nodes[n]['emb'] for n in neighbors]
+                unique, counts = np.unique(nhbr_motifs, return_counts=True)
+                for idx, u in enumerate(unique):
+                    # try:
+                    Kk_weight.edges[(node_motif,u)]['e_weight'] += counts[idx]
+                    # except KeyError:
+                    #     pdb.set_trace()
         return Kk_weight
 
     def convert_motif2vec(self, Kk):
@@ -615,7 +631,7 @@ class K2Model():
         e_cmap = {-1.: "blue", 1.: "red", 0.: "black"}
         e_colors = [e_cmap[sign] for sign in e_sign]
         max_wt = np.max(e_weights)
-        # print(nx.get_edge_attributes(G, 'e_weight'))
+
         e_thickness = []
         for ew in e_weights:
             # et = int(np.max([1, ew]))
