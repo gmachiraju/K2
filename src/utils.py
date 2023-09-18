@@ -101,7 +101,10 @@ def rescale_vec(vec):
         vec: vector of importance values
     """
     vec = vec.astype(float)
-    return (vec - np.min(vec)) / (np.max(vec) - np.min(vec))
+    denom = np.max(vec) - np.min(vec)
+    if denom == 0: # all same value
+        return np.ones(vec.shape) * 0.5
+    return (vec - np.min(vec)) / denom
 
 def binarize_vec(vec, thresh, conditional=None):
     if conditional == "<":

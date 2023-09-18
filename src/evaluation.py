@@ -28,7 +28,7 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
     num_ht = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["alpha"]) * len(sweep_dict["tau"])
     num_lm = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["lambda"])
     print("We have %d models to train..." % (num_ht +  num_lm))
-    print("...and have %d models trained so far!" % len(results_dict.keys()))
+    print("...and have %d models trained so far!" % len(os.listdir(model_cache_dir)))
     print("="*40)
 
     for k in sweep_dict["k"]:
@@ -41,7 +41,7 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
             for lam in sweep_dict["lambda"]:
                 print("Gridsearch: currently on ElasticNet model with k=%d, r=%d, lam=%f" % (k, r, lam))
                 model, model_str = fetch_model(proc, r, model_cache_dir, model_args, lam=lam)
-                if model_str in results_dict.keys():
+                if (model_str in results_dict.keys()) and (model_str in os.listdir(model_cache_dir)):
                     continue # already trained and stored
                 gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_cache_dir, results_dict, results_dir, model_cache_dir, linearized_cache_dir)
 
@@ -51,7 +51,7 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
                 for tau in sweep_dict["tau"]:
                     print("Gridsearch: currently on hypothesis test with k=%d, r=%d, alpha=%f, tau=%f" % (k, r, alpha, tau))   
                     model, model_str = fetch_model(proc, r, model_cache_dir, model_args, alpha=alpha, tau=tau)
-                    if model_str in results_dict.keys():
+                    if (model_str in results_dict.keys()) and (model_str in os.listdir(model_cache_dir)):
                         continue # already trained and stored
                     gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_cache_dir, results_dict, results_dir, model_cache_dir, linearized_cache_dir)
                 
@@ -108,6 +108,7 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
         else:
             y_hat = np.nan # no prediction for inferential model
 
+        # pdb.set_trace()
         dicts = eval_suite(G_name, P, Y, y, y_hat, thresholds)
         data_results_dict["thresh_msd"] = dicts[0]
         data_results_dict["thresh_cm"] = dicts[1]
@@ -140,7 +141,10 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds):
     # Continuous eval can only run on class-1 data
     datum_cont = {"auroc": np.nan, "auprc": np.nan, "ap": np.nan}
     if y == 1:
+        # try:
         datum_cont = {"auroc": auroc(P_vec, Y_vec), "auprc": auprc(P_vec, Y_vec), "ap": ap(P_vec, Y_vec)}
+        # except ValueError:
+        #     pdb.set_trace()
         # _dict[(G_name, y)]
 
     # compute predictions from maps
@@ -321,15 +325,16 @@ def test_eval():
 
 #========================BASH SCRIPTING========================
 def main():
+    from job_params import experiment_setup
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sweep_dict", type=str, help="dictionary of hyperparameter sweeps")
     parser.add_argument("--save_dir", type=str, help="directory to store results")
     parser.add_argument("--encoder_name", type=str, help="name of encoder")
     parser.add_argument("--gt_dir", type=str, help="directory of ground truth graphs")
-    parser.add_argument("--proc_args", type=str, help="dictionary of hyperparameters for processor")
-    parser.add_argument("--model_args", type=str, help="dictionary of hyperparameters for model")
     args = parser.parse_args()
-    train_gridsearch(args.sweep_dict, args.save_dir, args.modelstr, args.gt_dir, args.proc_args, args.model_args)
+    # Note: change params in script below if needed!
+    sweep_dict, proc_args, model_args = experiment_setup(args.encoder_name)
+
+    train_gridsearch(sweep_dict, args.save_dir, args.encoder_name, args.gt_dir, proc_args, model_args)
 
 if __name__ == "__main__":
     main()
