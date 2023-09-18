@@ -4,12 +4,14 @@ from tqdm.notebook import tqdm
 import pdb 
 import time
 from copy import copy
+import argparse
 
 from utils import serialize, deserialize, serialize_model, deserialize_model
 from utils import compute_adaptive_thresh_graph, compute_adaptive_thresh_vec
 from utils import binarize_graph, binarize_vec, rescale_graph, rescale_vec, linearize_graph
 from k2 import K2Processor, K2Model
 from metrics import confusion, msd, auroc, auprc, ap
+import metrics
 
 def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, model_args):
     """
@@ -275,11 +277,59 @@ def few_hot_classification(P_probs, few=10):
     return np.mean(top_few)
 
 
-# Test eval
-#===========
+# Model Selection (NOT YET IMPLEMENTED)
+#=================
+def get_top_metric_model_confusion(metric_str, results_dict, results_dir, results_cache_dir, model_cache_dir):
+    valid_metrics = ["specificity", "precision", "fnr", "fdr", "recall", "accuracy", "balanced_acc", "correlation", "threat_score", "prevalence", "dice", "jaccard"]
+    check_eval_metric(metric_str, valid_metrics)
+    for model_str in results_dict.keys():
+        pass
+        
+
+def get_top_metric_model_continuous(metric_str, results_dict, results_dir, results_cache_dir, model_cache_dir):
+    valid_metrics = ["auroc", "auprc", "ap"]
+    check_eval_metric(metric_str, valid_metrics)
+
+def get_top_model_metric_continuousIID(metric_str, results_dict, results_dir, results_cache_dir, model_cache_dir, linearized_cache_dir):
+    valid_metrics = ["auroc", "auprc", "ap"]
+    check_eval_metric(metric_str, valid_metrics)
+    
+# helper functions  
+def get_model_confusion():
+    model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
+    metric = eval("metrics." + metric_str)
+    metric_vals = []
+    for G_name in model_results_dict.keys():
+        datum_results_dict = model_results_dict[G_name]
+        datum_metric = datum_results_dict["thresh_msd"]
+        metric_vals.append(metric(datum_metric))
+
+def check_eval_metric(metric_str, valid_metrics):
+    if metric_str not in valid_metrics:
+        print("Error. Requested metric not available for evaluation.")
+        print("Please choose from: " + str(valid_metrics))
+        exit()
+
+ # Test eval
+ # ===========   
 def test_eval():
     """
     Test-set evaluation using top models extracted from training grid search
     SHOULD JUST CALL GRIDSEARCH_ITERATION
     """
     pass
+
+#========================BASH SCRIPTING========================
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sweep_dict", type=str, help="dictionary of hyperparameter sweeps")
+    parser.add_argument("--save_dir", type=str, help="directory to store results")
+    parser.add_argument("--encoder_name", type=str, help="name of encoder")
+    parser.add_argument("--gt_dir", type=str, help="directory of ground truth graphs")
+    parser.add_argument("--proc_args", type=str, help="dictionary of hyperparameters for processor")
+    parser.add_argument("--model_args", type=str, help="dictionary of hyperparameters for model")
+    args = parser.parse_args()
+    train_gridsearch(args.sweep_dict, args.save_dir, args.modelstr, args.gt_dir, args.proc_args, args.model_args)
+
+if __name__ == "__main__":
+    main()

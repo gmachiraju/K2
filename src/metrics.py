@@ -120,7 +120,7 @@ def jaccard(ravel):
         return 1 
     return tp / (tp + fp + fn)
 
-# below are metrics that require probabilities
+# below are metrics that require probabilities and a mix of classes
 def auroc(prob, target):
     # area under receiver operating characteristic curve
     return roc_auc_score(target, prob)
