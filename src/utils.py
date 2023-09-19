@@ -55,6 +55,13 @@ def linearize_graph(G):
     vec = np.array([vec[key] for key in sorted_keys]) # enforcing ordering of linear index
     return vec
 
+def create_gt_graph(G):
+    # print(nx.get_node_attributes(G, "gt"))
+    # print(nx.get_node_attributes(G, "resid"))
+    Y = G.copy()
+    nx.set_node_attributes(Y, nx.get_node_attributes(G, 'gt'), 'emb')
+    return Y
+
 def rescale_graph(G):
     """
     Min-max scaling to [0,1]. Helpful for importance values of K2 graph

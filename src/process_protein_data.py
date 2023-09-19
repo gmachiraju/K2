@@ -155,6 +155,9 @@ if __name__ == '__main__':
         labels = np.zeros(len(emb_data['resids']))
         pos_resids = [atom_info.aa_to_letter(i.split('_')[0]) + i.split('_')[1] for i in res]
         labels[np.isin(emb_data['resids'], pos_resids)] = 1
+        if labels.sum() == 0:
+            print(f'{pdbc} has no positive residues')
+            continue
         
         G = dict2graph(emb_data, labels)
         G.graph.update({'id': pdbc, 'label': 1})
@@ -190,6 +193,9 @@ if __name__ == '__main__':
         labels = np.zeros(len(emb_data['resids']))
         pos_resids = [atom_info.aa_to_letter(i.split('_')[0]) + i.split('_')[1] for i in res]
         labels[np.isin(emb_data['resids'], pos_resids)] = 1
+        if labels.sum() == 0:
+            print(f'{pdbc} has no positive residues')
+            continue
         
         G = dict2graph(emb_data, labels)
         G.graph.update({'id': pdbc, 'label': 1})

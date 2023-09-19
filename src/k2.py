@@ -42,11 +42,10 @@ class K2Processor():
         self.verbosity = args.verbosity
         self.so_dict_path = args.so_dict_path
 
-        if self.dataset_path is None:
-            raise Exception("Error: dataset path is not provided.")
-
         if self.embeddings_path is None:
             print("No embeddings path provided, sampling from dataset")
+            if self.dataset_path is None:
+                raise Exception("Error: dataset path is not provided.")
             # determine sample size PER datum based on: sample_size/dataset size
             N = len(os.listdir(self.dataset_path)) 
             if N < self.sample_size:
@@ -56,12 +55,13 @@ class K2Processor():
         
             # run sampling
             self.embeddings_path = self.sample_embeddings()
+            self.description = self.quantizer_type + "-" + str(self.k) + "-" + self.sample_scheme + "-" + str(self.sample_size)
         else:
             print("Embeddings path provided, loading embeddings...")
+            self.description = self.quantizer_type + "-" + str(self.k)
 
         self.motif_graph = self.instantiate_motif_graph() # K_k
         self.quantizer = None
-        self.description = self.quantizer_type + "-" + str(self.k) + "-" + self.sample_scheme + "-" + str(self.sample_size)
 
     def sample_embeddings(self):
         """
