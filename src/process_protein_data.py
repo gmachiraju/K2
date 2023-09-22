@@ -139,6 +139,8 @@ if __name__ == '__main__':
         batch_converter = alphabet.get_batch_converter()
         model = model.to(device)
         model.eval()
+    else:
+        raise Exception('Please choose a valid encoder. Options are COLLAPSE and ESM.')
     
     database = deserialize(args.dataset)
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)

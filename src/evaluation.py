@@ -8,7 +8,7 @@ import argparse
 
 from utils import serialize, deserialize, serialize_model, deserialize_model
 from utils import compute_adaptive_thresh_graph, compute_adaptive_thresh_vec
-from utils import binarize_graph, binarize_vec, rescale_graph, rescale_vec, linearize_graph, create_gt_graph
+from utils import binarize_graph, binarize_vec, rescale_graph, rescale_vec, linearize_graph, set_graph_emb, AAQuantizer
 from k2 import K2Processor, K2Model
 from metrics import confusion, msd, auroc, auprc, ap
 import metrics
@@ -32,9 +32,10 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
     print("="*40)
 
     metal = process_args["metal"]
-    for cutoff in sweep_dict["cutoff"]:
-        process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
-        model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
+    for cutoff in sweep_dict.get("cutoff", [np.nan]):
+        if not np.isnan(cutoff):
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
             serialize_model(proc, os.path.join(proc_cache_dir, processor_name))
@@ -94,9 +95,11 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
         data_results_dict = {}
         G = deserialize(os.path.join(model_args["train_graph_path"], G_name))
         if model_args["modality"] == "graph":
-            Y = create_gt_graph(G)
+            Y = set_graph_emb(G, 'gt')
         else:
             Y = deserialize(os.path.join(gt_dir, G_name + "_gt")) # groud truth
+        if model.processor.quantizer_type == "AA":
+            G = set_graph_emb(G, 'resid')
         P = model.prospect(G)
         if thresh == "all":
             threshold_a = compute_adaptive_thresh_graph(P)
@@ -258,7 +261,10 @@ def fetch_processor(k, proc_cache_dir, process_args, cutoff=np.nan):
     else:
         print("Fitting processor for k=%d" % k)
         proc = spawn_processor(k, process_args)
-        proc.fit_quantizer()
+        if process_args["quantizer_type"] == "AA":
+            proc.quantizer = AAQuantizer()
+        else:
+            proc.fit_quantizer()
     return proc, processor_name
 
 def spawn_processor(k, process_args):

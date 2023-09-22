@@ -55,11 +55,10 @@ def linearize_graph(G):
     vec = np.array([vec[key] for key in sorted_keys]) # enforcing ordering of linear index
     return vec
 
-def create_gt_graph(G):
-    # print(nx.get_node_attributes(G, "gt"))
-    # print(nx.get_node_attributes(G, "resid"))
+def set_graph_emb(G, attr=None):
+    """sets emb attribute for each node using another attribute"""
     Y = G.copy()
-    nx.set_node_attributes(Y, nx.get_node_attributes(G, 'gt'), 'emb')
+    nx.set_node_attributes(Y, nx.get_node_attributes(G, attr), 'emb')
     return Y
 
 def rescale_graph(G):
@@ -200,7 +199,10 @@ def construct_sprite(G, processor):
     S.graph.update({'d': 1})
     for node in S.nodes:
         embedding = S.nodes[node]['emb']
-        motif_label = processor.quantizer.predict(embedding.reshape(1, -1).astype(float))[0]
+        if isinstance(embedding, np.ndarray):
+            motif_label = processor.quantizer.predict(embedding.reshape(1, -1).astype(float))[0]
+        else: # if not using FM embedding (e.g. amino acid baseline)
+            motif_label = processor.quantizer.predict(embedding)
         S.nodes[node]['emb'] = motif_label
     return S
 
@@ -358,3 +360,32 @@ def visualize_protein_sprite(sprite, prospect_flag=False):
     view = nglview.show_biopython(struct, default_representation=False)
     view.add_cartoon("protein", color=scheme)
     return view
+
+class AAQuantizer(object):
+    def __init__(self):
+        self.aa_to_label = lambda x: {
+            'A': 0,
+            'R': 1,
+            'N': 2,
+            'D': 3,
+            'C': 4,
+            'E': 5,
+            'Q': 6,
+            'G': 7,
+            'H': 8,
+            'I': 9,
+            'L': 10,
+            'K': 11,
+            'M': 12,
+            'F': 13,
+            'P': 14,
+            'S': 15,
+            'T': 16,
+            'W': 17,
+            'Y': 18,
+            'V': 19
+        }.get(x, 20)
+    
+    def predict(self, resid):
+        return self.aa_to_label(resid[0])
+

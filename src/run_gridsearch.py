@@ -1,7 +1,7 @@
 from evaluation import train_gridsearch
 
 if __name__=='__main__':
-    encoder = 'COLLAPSE'
+    encoder = 'ESM'
     metal = 'CA'
 
     ks = [10,15,20]
@@ -14,7 +14,7 @@ if __name__=='__main__':
     proc_args = {"datatype": "protein",
             "k": None,
             "metal": metal,
-            "quantizer_type": "kmeans",
+            "quantizer_type": "AA" if encoder == "AA" else "kmeans",
             "embeddings_path": None,
             "embeddings_type": "dict",
             "mapping_path": None,

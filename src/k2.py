@@ -132,7 +132,7 @@ class K2Processor():
         if self.datatype == 'histo':
             ms = self.get_plot_markers()
         elif self.datatype == 'protein':
-            ms = self.get_residue_labels()
+            ms = self.get_graph_labels()
         ms_dict = dict(zip(self.id_list, ms))
         embed_df = pd.DataFrame.from_dict(ms_dict, orient='index', columns=["marker"])
         o_df = embed_df.loc[embed_df['marker'] == "o"] # 0-class
@@ -186,7 +186,7 @@ class K2Processor():
         print("sampled", str(sal_counter), "known salient objects!")
         return ms
     
-    def get_residue_labels(self):
+    def get_graph_labels(self):
         """
         Protein-specific labels
         """
