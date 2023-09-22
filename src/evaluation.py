@@ -282,18 +282,37 @@ def few_hot_classification(P_probs, few=10):
 
  # Test eval
  # ===========   
-def test_eval(model_str, threshold, test_dir, gt_dir):
+def test_eval(model_str, threshold, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image"):
     """
     Test-set evaluation using top models extracted from training grid search
     SHOULD JUST CALL GRIDSEARCH_ITERATION
     """
+    # get model params from model_str
+    k,r,alpha,tau,lam = extract_params(model_str)
+    hparams = {"alpha": alpha, "tau": tau, "lambda": lam}
+    processor = deserialize_model(os.path.join(processor_cache_dir, "k%d.processor" % k))
+
     # load model from string
+    model = deserialize_model(os.path.join(model_cache_dir, model_str))
+    # pass to gridsearch iteration
+    model_args = {"modality":modality,
+            "processor": processor,
+            "r": r,
+            "variant": None,
+            "hparams": hparams,
+            "train_graph_path": G_dir,
+            "train_label_dict": label_dict}
+    return gridsearch_iteration(model, model_args, gt_dir, thresh=threshold)
+    
 
-    # iterate through test set 
-
-    # evaluate with grid search iteration
-    pass
-
+def extract_params(model_str):
+    model_params = model_str.split("_")
+    k = int(model_params[0].split("k")[1])
+    r = int(model_params[1].split("r")[1])
+    alpha = float(model_params[2].split("alpha")[1])
+    tau = float(model_params[3].split("tau")[1])
+    lam = float(model_params[4].split("lam")[1])
+    return k,r,alpha,tau,lam
 
 #========================BASH SCRIPTING========================
 def main():

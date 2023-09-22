@@ -50,7 +50,10 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
             model_cms[thresh] /= N
         # get top score and threshold
         scores = [(thresh, model_cms[thresh]) for thresh in model_cms.keys()]
-        metric_dict[model_str] = max(scores, key=lambda item: item[1])
+        max_score = max(scores, key=lambda item: item[1])
+        min_score = min(scores, key=lambda item: item[1])
+        stability = max_score[1] - min_score[1]
+        metric_dict[model_str] = (max_score[0], max_score[1], stability)
     # get top model
     top_model_str = max(metric_dict, key=lambda item: metric_dict[item][1])
     (threshold, top_metric_score) = metric_dict[top_model_str]
