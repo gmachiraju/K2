@@ -57,8 +57,12 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
     return top_model_str, threshold, top_metric_score
         
 def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir):
+    """
+    These metrics are the average of the continuous metrics over all data.
+    Metrics include auroc, auprc, and ap. Only applicable to class-1 data.
+    """
     valid_metrics = ["auroc", "auprc", "ap"]
-    metric = check_eval_metric(metric_str, valid_metrics)
+    _ = check_eval_metric(metric_str, valid_metrics)
     metric_dict = {}
     for model_str in os.listdir(model_cache_dir):
         model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
@@ -70,13 +74,15 @@ def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir):
                 continue
             scores.append(datum_results_dict["cont"][metric_str])
         metric_dict[model_str] = np.mean(scores)
-
     # get top model
     top_model_str = max(metric_dict, key=lambda item: metric_dict[item])
     top_metric_score = metric_dict[top_model_str]
     return top_model_str, top_metric_score
 
 def top_model_continuous_iid(metric_str, model_cache_dir, linearized_cache_dir):
+    """
+    These metrics compute single values for the entire unrolled dataset. Each element is treated IID.
+    """
     valid_metrics = ["auroc", "auprc", "ap"]
     metric = check_eval_metric(metric_str, valid_metrics)
     metric_dict = {}
@@ -94,6 +100,10 @@ def top_model_continuous_iid(metric_str, model_cache_dir, linearized_cache_dir):
     return top_model_str, top_metric_score
 
 def top_model_preds(metric_str, results_cache_dir, model_cache_dir):
+    """
+    This metric computes the continuous metric for datum-level predicitions.
+
+    """
     valid_metrics = ["auroc", "auprc", "ap"]
     metric = check_eval_metric(metric_str, valid_metrics)
     metric_dict = {}
@@ -107,7 +117,6 @@ def top_model_preds(metric_str, results_cache_dir, model_cache_dir):
             ys.append(y)
             y_hats.append(datum_preds[0])
             y_map_hats.append(datum_preds[1])
-        
         try:
             y_hat_metric = metric(y_hats, ys) # nans for hypothesis test
         except ValueError:

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from tqdm.notebook import tqdm
+# from tqdm.notebook import tqdm
 import pdb 
 import time
 from copy import copy
@@ -280,16 +280,20 @@ def few_hot_classification(P_probs, few=10):
     top_few = sorted_array[-few:]
     return np.mean(top_few)
 
-
-
  # Test eval
  # ===========   
-def test_eval():
+def test_eval(model_str, threshold, test_dir, gt_dir):
     """
     Test-set evaluation using top models extracted from training grid search
     SHOULD JUST CALL GRIDSEARCH_ITERATION
     """
+    # load model from string
+
+    # iterate through test set 
+
+    # evaluate with grid search iteration
     pass
+
 
 #========================BASH SCRIPTING========================
 def main():

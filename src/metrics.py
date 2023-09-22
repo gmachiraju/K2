@@ -13,7 +13,7 @@ def confusion(a,b):
     Outputs: unraveled confusion matrix
     """
     cm = confusion_matrix(a, b, labels=[True, False])
-    ravel = cm.ravel() # tn, tp, fn, fp
+    ravel = cm.ravel() # tn, tp, fn, fp -- wrong
     return ravel
 
 ###########
@@ -27,33 +27,38 @@ def confusion(a,b):
 ###########
 
 def specificity(ravel): # aka TNR
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if tn + fp == 0: # nan
         return 1 
     return tn / (tn + fp)
 
 def precision(ravel): # aka PPV
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if (tp + fp) == 0: # nan
         return 0
     return tp / (tp + fp)
 
 def fnr(ravel): # aka miss rate
     # False negative rate
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if (tp + fn) == 0: # nan
         return 0
     return fn / (tp + fn)
 
 def fdr(ravel):
     # False discovery rate, not to be confused with franklin delano roosevelt
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if (tp + fp) == 0: # nan
         return 0
     return fp / (tp + fp)
 
 def recall(ravel): # aka sensitivity, TPR
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if tp + fn == 0: # nan
         return 1 
     return tp / (tp + fn)
@@ -62,14 +67,17 @@ def sensitivity(ravel): # aka recall, TPR
     return recall(ravel) # alias support
 
 def accuracy(ravel):
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     return (tp + tn) / (tp + tn + fp + fn)
 
 def balanced_acc(ravel, adjusted=False):
     # Balanced accuracy
     # https://github.com/scikit-learn/scikit-learn/blob/364c77e04/sklearn/metrics/_classification.py#L2111
-    tn, tp, fn, fp = ravel
-    C = np.array([[tp, fn], [fp, tn]])
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
+    # C = np.array([[tp, fn], [fp, tn]])
+    C = np.array([[tp, fp], [fn, tn]])
     with np.errstate(divide="ignore", invalid="ignore"):
         per_class = np.diag(C) / C.sum(axis=1)
 
@@ -83,7 +91,8 @@ def balanced_acc(ravel, adjusted=False):
 
 def correlation(ravel):
     # Mathew's correlation coefficient (MCC)
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     C = np.array([[tp, fn], [fp, tn]])
 
     # https://github.com/scikit-learn/scikit-learn/blob/364c77e04/sklearn/metrics/_classification.py#L848
@@ -100,22 +109,26 @@ def correlation(ravel):
         return cov_ytyp / np.sqrt(cov_ytyt * cov_ypyp)
 
 def threat_score(ravel):
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     return tp / (tp + fn + fp)
 
 def prevalence(ravel):
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     return (tp + fn) / (tp + tn + fp + fn)
     
 # below metrics give NaN for class-0 data
 def dice(ravel):
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if ((2*tp) + fp + fn) == 0: # nan
         return 1 
     return (2*tp) / ((2*tp) + fp + fn)
 
 def jaccard(ravel):
-    tn, tp, fn, fp = ravel
+    # tn, tp, fn, fp = ravel
+    tp,fp,fn,tn = ravel
     if (tp + fp + fn) == 0: # nan
         return 1 
     return tp / (tp + fp + fn)
