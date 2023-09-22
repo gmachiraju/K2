@@ -281,38 +281,6 @@ def few_hot_classification(P_probs, few=10):
     return np.mean(top_few)
 
 
-# Model Selection (NOT YET IMPLEMENTED)
-#=================
-def get_top_metric_model_confusion(metric_str, results_dict, results_dir, results_cache_dir, model_cache_dir):
-    valid_metrics = ["specificity", "precision", "fnr", "fdr", "recall", "accuracy", "balanced_acc", "correlation", "threat_score", "prevalence", "dice", "jaccard"]
-    check_eval_metric(metric_str, valid_metrics)
-    for model_str in results_dict.keys():
-        pass
-        
-
-def get_top_metric_model_continuous(metric_str, results_dict, results_dir, results_cache_dir, model_cache_dir):
-    valid_metrics = ["auroc", "auprc", "ap"]
-    check_eval_metric(metric_str, valid_metrics)
-
-def get_top_model_metric_continuousIID(metric_str, results_dict, results_dir, results_cache_dir, model_cache_dir, linearized_cache_dir):
-    valid_metrics = ["auroc", "auprc", "ap"]
-    check_eval_metric(metric_str, valid_metrics)
-    
-# helper functions  
-def get_model_confusion():
-    model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
-    metric = eval("metrics." + metric_str)
-    metric_vals = []
-    for G_name in model_results_dict.keys():
-        datum_results_dict = model_results_dict[G_name]
-        datum_metric = datum_results_dict["thresh_msd"]
-        metric_vals.append(metric(datum_metric))
-
-def check_eval_metric(metric_str, valid_metrics):
-    if metric_str not in valid_metrics:
-        print("Error. Requested metric not available for evaluation.")
-        print("Please choose from: " + str(valid_metrics))
-        exit()
 
  # Test eval
  # ===========   

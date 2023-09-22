@@ -155,3 +155,6 @@ def msd(P):
     if len(cardinalities) == 0:
         return 0
     return np.mean(cardinalities) / len(ccs)
+
+def identity(data):
+    return data
