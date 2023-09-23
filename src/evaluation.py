@@ -34,6 +34,8 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
     metal = process_args["metal"]
     for cutoff in sweep_dict.get("cutoff", [np.nan]):
         if not np.isnan(cutoff):
+            if encoder_name == 'AA':
+                encoder_name = 'COLLAPSE'
             process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
             model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
         for k in sweep_dict["k"]:

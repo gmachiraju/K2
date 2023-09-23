@@ -61,6 +61,21 @@ def set_graph_emb(G, attr=None):
     nx.set_node_attributes(Y, nx.get_node_attributes(G, attr), 'emb')
     return Y
 
+def expand_positive_nodes(G):
+    """
+    Expands positive nodes to include all neighbors
+    Inputs:
+        G: networkx graph
+    Outputs:
+        G: networkx graph with expanded positive nodes
+    """
+    G_expanded = G.copy()
+    for node in G.nodes:
+        if G.nodes[node]['gt'] == 1:
+            for nhbr in G.neighbors(node):
+                G_expanded.nodes[nhbr]['gt'] = 1
+    return G_expanded
+
 def rescale_graph(G):
     """
     Min-max scaling to [0,1]. Helpful for importance values of K2 graph

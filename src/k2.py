@@ -364,7 +364,8 @@ class K2Model():
         for t, G_file in enumerate(G_files):
             # load map graph data
             G = utils.deserialize(os.path.join(self.train_graph_path, G_file))
-            
+            if self.processor.quantizer_type == 'AA':
+                G = utils.set_graph_emb(G, 'resid')
             # load in labels
             if self.train_label_dict is None:
                 y.append(G.graph['label'])

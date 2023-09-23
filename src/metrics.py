@@ -74,9 +74,11 @@ def accuracy(ravel):
 def balanced_acc(ravel, adjusted=False):
     # Balanced accuracy
     # https://github.com/scikit-learn/scikit-learn/blob/364c77e04/sklearn/metrics/_classification.py#L2111
+
     # tn, tp, fn, fp = ravel
     tp,fp,fn,tn = ravel
     # C = np.array([[tp, fn], [fp, tn]])
+
     C = np.array([[tp, fp], [fn, tn]])
     with np.errstate(divide="ignore", invalid="ignore"):
         per_class = np.diag(C) / C.sum(axis=1)
@@ -91,7 +93,9 @@ def balanced_acc(ravel, adjusted=False):
 
 def correlation(ravel):
     # Mathew's correlation coefficient (MCC)
+
     # tn, tp, fn, fp = ravel
+
     tp,fp,fn,tn = ravel
     C = np.array([[tp, fn], [fp, tn]])
 
