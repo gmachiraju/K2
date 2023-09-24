@@ -8,7 +8,7 @@ import argparse
 
 from utils import serialize, deserialize, serialize_model, deserialize_model
 from utils import compute_adaptive_thresh_graph, compute_adaptive_thresh_vec
-from utils import binarize_graph, binarize_vec, rescale_graph, rescale_vec, linearize_graph
+from utils import binarize_graph, binarize_vec, rescale_graph, rescale_vec, linearize_graph, set_graph_emb, AAQuantizer
 from k2 import K2Processor, K2Model
 from metrics import confusion, msd, auroc, auprc, ap
 import metrics
@@ -25,44 +25,52 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
         model_args: dictionary of hyperparameters for model
     """
     results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir = setup_gridsearch(save_dir, encoder_name)
-    num_ht = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["alpha"]) * len(sweep_dict["tau"])
+    num_ht = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["alpha"]) * len(sweep_dict["tau"]) * len(sweep_dict["cutoff"])
     num_lm = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["lambda"])
     print("We have %d models to train..." % (num_ht +  num_lm))
     print("...and have %d models trained so far!" % len(os.listdir(model_cache_dir)))
     print("="*40)
 
-    for k in sweep_dict["k"]:
-        proc, processor_name = fetch_processor(k, proc_cache_dir, process_args)
-        serialize_model(proc, os.path.join(proc_cache_dir, processor_name))
+    metal = process_args["metal"]
+    for cutoff in sweep_dict.get("cutoff", [np.nan]):
+        if not np.isnan(cutoff):
+            if encoder_name == 'AA':
+                encoder_name = 'COLLAPSE'
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
+        for k in sweep_dict["k"]:
+            proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
+            serialize_model(proc, os.path.join(proc_cache_dir, processor_name))
 
-        for r in sweep_dict["r"]:
-            # Predictive: ElasticNet
-            model_args["variant"] = "predictive"
-            for lam in sweep_dict["lambda"]:
-                print("Gridsearch: currently on ElasticNet model with k=%d, r=%d, lam=%f" % (k, r, lam))
-                model, model_str = fetch_model(proc, r, model_cache_dir, model_args, lam=lam)
-                if (model_str in results_dict.keys()) and (model_str in os.listdir(model_cache_dir)):
-                    continue # already trained and stored
-                gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_cache_dir, results_dict, results_dir, model_cache_dir, linearized_cache_dir)
-
-            # Inferential: Hypothesis test
-            model_args["variant"] = "inferential"
-            for alpha in sweep_dict["alpha"]:
-                for tau in sweep_dict["tau"]:
-                    print("Gridsearch: currently on hypothesis test with k=%d, r=%d, alpha=%f, tau=%f" % (k, r, alpha, tau))   
-                    model, model_str = fetch_model(proc, r, model_cache_dir, model_args, alpha=alpha, tau=tau)
-                    if (model_str in results_dict.keys()) and (model_str in os.listdir(model_cache_dir)):
+            for r in sweep_dict["r"]:
+                # Predictive: ElasticNet
+                model_args["variant"] = "predictive"
+                for lam in sweep_dict["lambda"]:
+                    print("Gridsearch: currently on ElasticNet model with k=%d, r=%d, cutoff=%f, lam=%f" % (k, r, cutoff, lam))
+                    model, model_str = fetch_model(proc, r, model_cache_dir, model_args, cutoff=cutoff, lam=lam)
+                    if model_str in results_dict.keys():
                         continue # already trained and stored
                     gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_cache_dir, results_dict, results_dir, model_cache_dir, linearized_cache_dir)
+
+                # Inferential: Hypothesis test
+                model_args["variant"] = "inferential"
+                for alpha in sweep_dict["alpha"]:
+                    for tau in sweep_dict["tau"]:
+                        print("Gridsearch: currently on hypothesis test with k=%d, r=%d, cutoff%f, alpha=%f, tau=%f" % (k, r, cutoff, alpha, tau))   
+                        model, model_str = fetch_model(proc, r, model_cache_dir, model_args, cutoff=cutoff, alpha=alpha, tau=tau)
+                        if model_str in results_dict.keys():
+                            continue # already trained and stored
+                        gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_cache_dir, results_dict, results_dir, model_cache_dir, linearized_cache_dir)
                 
 def gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_cache_dir, results_dict, results_dir, model_cache_dir, linearized_cache_dir):
+    start = time.time()
     model_results_dict, datum_linearized_dict = gridsearch_iteration(model, model_args, gt_dir)
     results_dict[model_str] = os.path.join(results_cache_dir, model_str) # save_path
     serialize(model_results_dict, os.path.join(results_cache_dir, model_str))
     serialize(results_dict, results_dir)
     serialize(datum_linearized_dict, os.path.join(linearized_cache_dir, model_str))
     serialize_model(model, os.path.join(model_cache_dir, model_str))
-    print("Saved model/results!" + "\n" + "-"*40)
+    print("Saved model/results!" + "\n" + "Time elapsed: %.2f seconds" % (time.time() - start) + "\n" + "-"*40)
 
 # Helper functions
 #=================
@@ -88,7 +96,12 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
     for t, G_name in enumerate(G_files):
         data_results_dict = {}
         G = deserialize(os.path.join(model_args["train_graph_path"], G_name))
-        Y = deserialize(os.path.join(gt_dir, G_name + "_gt")) # groud truth
+        if model_args["modality"] == "graph":
+            Y = set_graph_emb(G, 'gt')
+        else:
+            Y = deserialize(os.path.join(gt_dir, G_name + "_gt")) # groud truth
+        if model.processor.quantizer_type == "AA":
+            G = set_graph_emb(G, 'resid')
         P = model.prospect(G)
         if thresh == "all":
             threshold_a = compute_adaptive_thresh_graph(P)
@@ -99,7 +112,12 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
         if model.train_label_dict: # loaded a dict
             y = model.train_label_dict[G_name]
         else: # internally stored in graph
-            y = G.label
+            y = G.graph["label"]
+        
+        ## JUST FOR TRACKING GRAPHS WITH NO POSITIVES -- REMOVE LATER
+        if (y == 1) and (linearize_graph(Y).sum() == 0):
+            print('skipping ' + G.graph["id"] + ': no positive residues')
+            continue
         
         if model.variant == "predictive":
             sprite = model.construct_sprite(G)
@@ -207,7 +225,7 @@ def setup_gridsearch(save_dir, encoder_name):
         os.makedirs(linearized_cache_dir)
     return results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir
 
-def fetch_model(proc, r, model_cache_dir, model_args, alpha=np.nan, tau=np.nan, lam=np.nan):
+def fetch_model(proc, r, model_cache_dir, model_args, cutoff=np.nan, alpha=np.nan, tau=np.nan, lam=np.nan):
     """
     Checks existence of model in cache, otherwise spawns and fits model
     Inputs:
@@ -219,7 +237,7 @@ def fetch_model(proc, r, model_cache_dir, model_args, alpha=np.nan, tau=np.nan, 
     Note: np.nan defaults allows us to overwrite and indicate which variant we are using
     """
     k = proc.k
-    model_name = "k%d_r%d_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, alpha, tau, lam)
+    model_name = "k%d_r%d_cutoff%.2f_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
     if model_name in os.listdir(model_cache_dir):
         print("Found fitted model for " + model_name)
         model = deserialize_model(os.path.join(model_cache_dir, model_name))
@@ -230,7 +248,7 @@ def fetch_model(proc, r, model_cache_dir, model_args, alpha=np.nan, tau=np.nan, 
         model.fit_kernel()
     return model, model_name
 
-def fetch_processor(k, proc_cache_dir, process_args):
+def fetch_processor(k, proc_cache_dir, process_args, cutoff=np.nan):
     """
     Checks existence of processor in cache, otherwise spawns and fits processor
     Inputs:
@@ -238,14 +256,17 @@ def fetch_processor(k, proc_cache_dir, process_args):
         proc_cache_dir: directory to store fitted processors
         process_args: dictionary of hyperparameters for processor
     """
-    processor_name = "k%d.processor" % k
+    processor_name = "k%d_cutoff%.2f.processor" % (k, cutoff)
     if processor_name in os.listdir(proc_cache_dir):
-        print("Found fitted processor for k=%d" % k)
+        print("Found fitted processor for k=%d, cutoff=%.2f" % (k, cutoff))
         proc = deserialize_model(os.path.join(proc_cache_dir, processor_name))
     else:
         print("Fitting processor for k=%d" % k)
         proc = spawn_processor(k, process_args)
-        proc.fit_quantizer()
+        if process_args["quantizer_type"] == "AA":
+            proc.quantizer = AAQuantizer()
+        else:
+            proc.fit_quantizer()
     return proc, processor_name
 
 def spawn_processor(k, process_args):

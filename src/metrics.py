@@ -2,19 +2,27 @@ import numpy as np
 import networkx as nx
 from sklearn.metrics import precision_recall_curve, auc, average_precision_score
 from sklearn.metrics import roc_auc_score
-from sklearn.metrics import confusion_matrix
+# from sklearn.metrics import confusion_matrix
 
-def confusion(a,b):
-    """
-    Computes a unraveled confusion matrix from two binary vectors.
-    Inputs:
-        a: iterable binary (predicted labels)
-        b: iterable binary (true labels)
-    Outputs: unraveled confusion matrix
-    """
-    cm = confusion_matrix(a, b, labels=[True, False])
-    ravel = cm.ravel() # tn, tp, fn, fp -- wrong
-    return ravel
+# def confusion(a,b):
+#     """
+#     Computes a unraveled confusion matrix from two binary vectors.
+#     Inputs:
+#         a: iterable binary (predicted labels)
+#         b: iterable binary (true labels)
+#     Outputs: unraveled confusion matrix
+#     """
+#     cm = confusion_matrix(a, b, labels=[True, False])
+#     ravel = cm.ravel() # tn, tp, fn, fp -- wrong
+#     return ravel
+
+def confusion(y_pred, y_true):
+    """use this instead of sklearn.confusion for ~20x speedup"""
+    y_true = 1 - y_true.reshape(-1).astype(int)
+    y_pred = 1 - y_pred.reshape(-1).astype(int)
+    y = 2 * y_pred + y_true
+    y = np.bincount(y, minlength=4)
+    return y
 
 ###########
 # Metrics
@@ -74,24 +82,30 @@ def accuracy(ravel):
 def balanced_acc(ravel, adjusted=False):
     # Balanced accuracy
     # https://github.com/scikit-learn/scikit-learn/blob/364c77e04/sklearn/metrics/_classification.py#L2111
+
     # tn, tp, fn, fp = ravel
     tp,fp,fn,tn = ravel
     # C = np.array([[tp, fn], [fp, tn]])
+
     C = np.array([[tp, fp], [fn, tn]])
     with np.errstate(divide="ignore", invalid="ignore"):
-        per_class = np.diag(C) / C.sum(axis=1) # axis 1
-
+        # per_class = np.diag(C) / C.sum(axis=1) 
+        per_class = np.diag(C) / C.sum(axis=0)
+        
     score = np.mean(per_class)
     if adjusted:
         n_classes = len(per_class)
         chance = 1 / n_classes
         score -= chance
         score /= 1 - chance
+
     return score
 
 def correlation(ravel):
     # Mathew's correlation coefficient (MCC)
+
     # tn, tp, fn, fp = ravel
+
     tp,fp,fn,tn = ravel
     C = np.array([[tp, fn], [fp, tn]])
 

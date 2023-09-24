@@ -42,11 +42,10 @@ class K2Processor():
         self.verbosity = args.verbosity
         self.so_dict_path = args.so_dict_path
 
-        if self.dataset_path is None:
-            raise Exception("Error: dataset path is not provided.")
-
         if self.embeddings_path is None:
             print("No embeddings path provided, sampling from dataset")
+            if self.dataset_path is None:
+                raise Exception("Error: dataset path is not provided.")
             # determine sample size PER datum based on: sample_size/dataset size
             N = len(os.listdir(self.dataset_path)) 
             if N < self.sample_size:
@@ -56,12 +55,13 @@ class K2Processor():
         
             # run sampling
             self.embeddings_path = self.sample_embeddings()
+            self.description = self.quantizer_type + "-" + str(self.k) + "-" + self.sample_scheme + "-" + str(self.sample_size)
         else:
             print("Embeddings path provided, loading embeddings...")
+            self.description = self.quantizer_type + "-" + str(self.k)
 
         self.motif_graph = self.instantiate_motif_graph() # K_k
         self.quantizer = None
-        self.description = self.quantizer_type + "-" + str(self.k) + "-" + self.sample_scheme + "-" + str(self.sample_size)
 
     def sample_embeddings(self):
         """
@@ -132,7 +132,7 @@ class K2Processor():
         if self.datatype == 'histo':
             ms = self.get_plot_markers()
         elif self.datatype == 'protein':
-            ms = self.get_residue_labels()
+            ms = self.get_graph_labels()
         ms_dict = dict(zip(self.id_list, ms))
         embed_df = pd.DataFrame.from_dict(ms_dict, orient='index', columns=["marker"])
         o_df = embed_df.loc[embed_df['marker'] == "o"] # 0-class
@@ -186,7 +186,7 @@ class K2Processor():
         print("sampled", str(sal_counter), "known salient objects!")
         return ms
     
-    def get_residue_labels(self):
+    def get_graph_labels(self):
         """
         Protein-specific labels
         """
@@ -364,7 +364,8 @@ class K2Model():
         for t, G_file in enumerate(G_files):
             # load map graph data
             G = utils.deserialize(os.path.join(self.train_graph_path, G_file))
-            
+            if self.processor.quantizer_type == 'AA':
+                G = utils.set_graph_emb(G, 'resid')
             # load in labels
             if self.train_label_dict is None:
                 y.append(G.graph['label'])
