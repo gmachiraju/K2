@@ -37,7 +37,6 @@ def serialize_model(obj, path):
 def deserialize_model(path):
     with open(path, 'rb') as fh:
         return dill.load(fh)
-
     
 #================================================================
 # useful transformations

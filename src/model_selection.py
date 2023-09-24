@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import pdb 
+import time 
 from copy import copy
 from tqdm import tqdm
 
@@ -58,8 +58,8 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
         metric_dict[model_str] = (max_score[0], max_score[1], stability)
     # get top model
     top_model_str = max(metric_dict, key=lambda item: metric_dict[item][1])
-    (threshold, top_metric_score) = metric_dict[top_model_str]
-    return top_model_str, threshold, top_metric_score
+    (threshold, top_metric_score, stability) = metric_dict[top_model_str]
+    return top_model_str, threshold, top_metric_score, stability
         
 def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir):
     """
@@ -133,7 +133,7 @@ def top_model_preds(metric_str, results_cache_dir, model_cache_dir):
     top_metric_score = metric_dict[top_model_str]
     return top_model_str, top_metric_score
 
-def k_hop_precision(datatype, results_cache_dir, model_cache_dir, graph_base_dir, eval_class="both"):
+def k_hop_precision(datatype, results_cache_dir, linearized_cache_dir, model_cache_dir, graph_base_dir, eval_class="both"):
     
     reg_thresholds = [np.round(el,1) for el in np.linspace(0,1,11)] # [0.1, 0.2, ..., 0.9, 1.0]
     idx_adaptive = len(reg_thresholds)
@@ -142,23 +142,29 @@ def k_hop_precision(datatype, results_cache_dir, model_cache_dir, graph_base_dir
     metric_dict = {}
     for model_str in tqdm(os.listdir(model_cache_dir)):
         model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
+        lin_results_dict = deserialize(os.path.join(linearized_cache_dir, model_str))
         
         setup_flag = False
         N = 0
         for graph_id in model_results_dict.keys():
             datum_results_dict = model_results_dict[graph_id]
+            
             if eval_class in [0,1]:
                 y = get_label(datum_results_dict)
                 if y != eval_class:
                     continue
-            pred, y = model_results_dict[graph_id]
+            pred, y = lin_results_dict[graph_id]
             if datatype == 'protein':
                 cutoff = np.round(float(model_str.split("_")[2].replace('cutoff', '')), 1)
                 graph_base_dir = graph_base_dir.replace('cutoff', str(cutoff))
             G = deserialize(os.path.join(graph_base_dir, graph_id))
+            
             G = expand_positive_nodes(G)
+            
             G = set_graph_emb(G, 'gt')
+            
             Y_1hop = linearize_graph(G)
+            
             
             threshold_a = compute_adaptive_thresh_vec(pred)
             thresholds[idx_adaptive] = (">", threshold_a) # adaptive forward
@@ -172,9 +178,10 @@ def k_hop_precision(datatype, results_cache_dir, model_cache_dir, graph_base_dir
                     cond, t = None, copy(thresh)
                 P_bin_vec = binarize_vec(pred, t, conditional=cond) # binarize with threshold
                 ravel = metrics.confusion(P_bin_vec, Y_1hop)
+                # ravel = confusion_matrix(P_bin_vec, Y_1hop)
                 precision_1hop = metrics.precision(ravel)
                 precisions[thresh] = precision_1hop
-                
+            
             if setup_flag == False:
                 model_cms = {} 
                 for thresh in precisions.keys():
@@ -191,8 +198,8 @@ def k_hop_precision(datatype, results_cache_dir, model_cache_dir, graph_base_dir
                     model_cms[new_thresh] += prec
                 else:
                     model_cms[thresh] += prec
-                N += 1
-                    
+            N += 1
+        
             # now average over all graphs
         for thresh in model_cms.keys():
             model_cms[thresh] /= N
