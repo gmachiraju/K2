@@ -10,6 +10,7 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
     valid_metrics = ["msd", "specificity", "precision", "fnr", "fdr", "recall", "accuracy", "balanced_acc", "correlation", "threat_score", "prevalence", "dice", "jaccard"]
     metric = check_eval_metric(metric_str, valid_metrics)
     metric_dict = {}
+    stabilities = []
     for model_str in os.listdir(model_cache_dir):
         model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
 
@@ -53,11 +54,12 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
         max_score = max(scores, key=lambda item: item[1])
         min_score = min(scores, key=lambda item: item[1])
         stability = max_score[1] - min_score[1]
+        stabilities.append(stability)
         metric_dict[model_str] = (max_score[0], max_score[1], stability)
     # get top model
     top_model_str = max(metric_dict, key=lambda item: metric_dict[item][1])
-    (threshold, top_metric_score) = metric_dict[top_model_str]
-    return top_model_str, threshold, top_metric_score
+    (threshold, top_metric_score, stability) = metric_dict[top_model_str]
+    return top_model_str, threshold, top_metric_score, stability, np.mean(stabilities)
         
 def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir):
     """

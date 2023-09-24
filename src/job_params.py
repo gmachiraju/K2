@@ -40,7 +40,7 @@ def experiment_setup(encoder_name):
             "so_dict_path": "/home/lofi/lofi/src/outputs/train_so_dict.obj"}
 
     hparams = {"alpha": None, "tau": None, "lambda": None}
-    label_dict = utils.deserialize("/home/k2/K2/src/outputs/refined_train_labeldict.obj")
+    label_dict = utils.deserialize("/home/k2/K2/src/outputs/refined_train_labeldict-" + encoder_name +".obj")
 
     model_args = {"modality":"image",
             "processor": None,
