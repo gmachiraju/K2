@@ -92,8 +92,8 @@ def gridsearch_iteration(loader, model_config):
     thresholds = [np.round(el,1) for el in np.linspace(0,1,11)]
     
     for g, y in tqdm(loader):
-        g = g.to(device)
-        y = y.to(device)
+        # g = g.to(device)
+        # y = y.to(device)
         G_name = g.id[0]
         
         out = model(g.x, g.edge_index, g.batch)
@@ -154,12 +154,15 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_config = ModelConfig(mode=ModelMode.binary_classification, task_level='graph', return_type='raw')
     
+    best_params = {}
     for encoder in ['COLLAPSE', 'ESM', 'AA']:
-        save_dir = os.path.join(args.base_dir, f'{encoder}_{args.metal}_{args.run_name}_gridsearch_results')
-        results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir = setup_gridsearch(save_dir, encoder)
+        # save_dir = os.path.join(args.base_dir, f'{encoder}_{args.metal}_{args.run_name}_gridsearch_results')
+        # results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir = setup_gridsearch(save_dir, encoder)
+        best_auprc = 0
+        best_auroc = 0
         for cutoff in [6.0, 8.0]:
             for lr in [1e-5, 0.0001, 0.0005]:
-                print('on', encoder, args.metal, cutoff, lr)
+                # print('on', encoder, args.metal, cutoff, lr)
                 run_name = args.run_name + f'-{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
                 if encoder == 'COLLAPSE':
                     encoder_name = 'COLLAPSE'
@@ -172,10 +175,10 @@ if __name__ == '__main__':
                     in_dim = 21
 
                 model_str = f'{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
-                train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_train_graphs"
+                # train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_train_graphs"
+                # train_dataset = ProteinData(train_graph_path, encoder)
+                # train_loader = DataLoader(train_dataset, batch_size=1)
                 test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_test_graphs"
-                train_dataset = ProteinData(train_graph_path, encoder)
-                train_loader = DataLoader(train_dataset, batch_size=1)
                 test_dataset = ProteinData(test_graph_path, encoder)
                 test_loader = DataLoader(test_dataset, batch_size=64)
     
@@ -188,12 +191,24 @@ if __name__ == '__main__':
                 y_true, y_pred = eval(model, test_loader, device)
                 test_auroc = metrics.auroc(y_pred, y_true)
                 test_auprc = metrics.auprc(y_pred, y_true)
-                print('\tTest AUROC:', test_auroc)
-                print('\tTest AUPRC:', test_auprc)
+                if test_auprc > best_auprc:
+                    best_auprc = test_auprc
+                    best_auroc = test_auroc
+                    best_params[encoder] = (cutoff, lr)
+        print(encoder)
+        print('\tBest Test AUROC:', best_auroc)
+        print('\tBest Test AUPRC:', best_auprc)
+        print('\tBest params:', best_params[encoder])
                 
-
-                # model_results_dict = gridsearch_iteration(train_loader, model_config)
-                # results_dict[model_str] = os.path.join(results_cache_dir, model_str) # save_path
-                # serialize(model_results_dict, os.path.join(results_cache_dir, model_str))
-                # serialize(model, os.path.join(model_cache_dir, model_str))
-                
+    for encoder in ['COLLAPSE', 'ESM', 'AA']:
+        print(f'Evaluating {encoder} on test set')
+        test_loader = DataLoader(test_dataset, batch_size=1)
+        
+        model = GAT(in_dim, 100).to('cpu')
+        model.load_state_dict(torch.load(f'../data/baselines/{run_name}-best.pt'))
+        model.eval()
+        
+        model_results_dict = gridsearch_iteration(test_loader, model_config)
+        # results_dict[model_str] = os.path.join(results_cache_dir, model_str) # save_path
+        serialize(model_results_dict, os.path.join('../data/baselines', f'{encoder}_test_results.pkl'))
+        # serialize(model, os.path.join(model_cache_dir, model_str))

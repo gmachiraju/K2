@@ -6,7 +6,7 @@ from copy import copy
 from tqdm import tqdm
 
 import metrics
-from evaluation import eval_suite, extract_params
+from evaluation import eval_suite, extract_params, check_eval_metric, get_label
 from utils import serialize, deserialize, expand_positive_nodes, linearize_graph, set_graph_emb, binarize_vec, compute_adaptive_thresh_vec
 
 def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_class="both", return_all=False):
@@ -244,18 +244,3 @@ def k_hop_precision(datatype, results_cache_dir, linearized_cache_dir, model_cac
     (threshold, top_metric_score) = metric_dict[top_model_str]
     return top_model_str, threshold, top_metric_score
 
-def get_label(datum_results_dict):
-    cont_scores = datum_results_dict["cont"]
-    if np.isnan(cont_scores["auroc"]):
-        return 0
-    return 1
-
-def check_eval_metric(metric_str, valid_metrics):
-    if metric_str not in valid_metrics:
-        print("Error. Requested metric not available for evaluation.")
-        print("Please choose from: " + str(valid_metrics))
-        exit()
-    elif metric_str == "msd":
-        return eval("metrics.identity")
-    else:
-        return eval("metrics." + metric_str)
