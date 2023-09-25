@@ -204,6 +204,20 @@ def convert_arr2graph_gt(gt, G):
             G_gt.nodes[node]['emb'] = 0 # class-0: ground truth is all zeros
     return G_gt
 
+def convert_arr2graph_GfromGT(G_gt, arr):
+    """
+    gt: ground truth array
+    """
+    G = G_gt.copy()
+    for node in G.nodes():
+        i,j = G.nodes[node]['pos']
+        if arr is not None: # class-1
+            G.nodes[node]['emb'] = int(arr[i,j])
+            # print("gt[i,j]:", gt[i,j])
+        else:
+            G.nodes[node]['emb'] = 0 # class-0: ground truth is all zeros
+    return G
+
 def construct_sprite(G, processor):
     """
     Takes a Map Graph G and constructs a sprite from it by applying an embedding quantizer

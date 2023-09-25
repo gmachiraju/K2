@@ -153,6 +153,57 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
 
     return model_results_dict, data_linearized_dict
 
+
+def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", label_dict=None):
+    """
+    Evaluates baseline models
+    """
+    if thresh == "all":
+        reg_thresholds = [np.round(el,1) for el in np.linspace(0,1,11)] # [0.1, 0.2, ..., 0.9, 1.0]
+        idx_adaptive = len(reg_thresholds)
+        thresholds = reg_thresholds + [np.nan, np.nan] # placeholders for adaptive
+    else:
+        thresholds = [thresh]
+    
+    model_results_dict = {} # returned object
+    data_linearized_dict = {} # for IID eval
+    for t, P_name in enumerate(os.listdir(P_path)):
+        data_results_dict = {}
+        P = deserialize(os.path.join(P_path, P_name))
+        if modality == "graph":
+            pdb.set_trace()
+        else:
+            Y = deserialize(os.path.join(Y_path, P_name + "-graph")) # groud truth
+        
+        if thresh == "all":
+            threshold_a = compute_adaptive_thresh_graph(P)
+            thresholds[idx_adaptive] = (">", threshold_a) # adaptive forward
+            thresholds[idx_adaptive + 1] = ("<", threshold_a) # adaptive backward
+
+        # get label
+        if modality == "graph": # not implemented
+            pdb.set_trace()
+        else:
+            y = label_dict[P_name]
+        y_hat = np.nan
+
+        # pdb.set_trace()
+        dicts = eval_suite(P_name, P, Y, y, y_hat, thresholds)
+        data_results_dict["thresh_msd"] = dicts[0]
+        data_results_dict["thresh_cm"] = dicts[1]
+        data_results_dict["cont"] = dicts[2]
+        data_results_dict["pred"] = dicts[3]
+        datum_linearized_dict = dicts[4]
+        
+        model_results_dict[P_name] = data_results_dict
+        data_linearized_dict[P_name] = datum_linearized_dict
+        # pdb.set_trace()
+        # pbar.set_description('processed: %d' % (1 + t))
+        # pbar.update(1)
+
+    return model_results_dict, data_linearized_dict
+
+
 def eval_suite(G_name, P, Y, y, y_hat, thresholds):
     """
     Calls on metrics to evaluate a single graph datum

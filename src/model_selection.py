@@ -70,7 +70,8 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
         top_model_str = max(metric_dict, key=lambda item: metric_dict[item][1])
         (threshold, top_metric_score, stability) = metric_dict[top_model_str]
         return top_model_str, threshold, top_metric_score, stability
-        
+
+
 def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir, return_all=False):
     """
     These metrics are the average of the continuous metrics over all data.
