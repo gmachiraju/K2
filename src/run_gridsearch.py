@@ -6,12 +6,12 @@ if __name__=='__main__':
     metal = sys.argv[2]
     
     if encoder == "AA":
-        ks = [20]
+        ks = [21]
     else:
         ks = [15, 20, 25, 30]
-    rs = [0,1,2,4]
-    alphas = [0.001, 0.01, 0.1, 0.5, 1e10]
-    taus = [0, 1, 2]
+    rs = [1,2,4]
+    alphas = [0.01, 0.1, 0.5]
+    taus = [1, 2, 4]
     lambdas = [0.5] # keep as elastic
     cutoffs = [4.0, 6.0, 8.0] # edge cutoff for protein graph
 

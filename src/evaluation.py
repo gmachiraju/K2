@@ -144,7 +144,7 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
         data_results_dict["cont"] = dicts[2]
         data_results_dict["pred"] = dicts[3]
         datum_linearized_dict = dicts[4]
-
+        
         model_results_dict[G_name] = data_results_dict
         data_linearized_dict[G_name] = datum_linearized_dict
         # pdb.set_trace()
@@ -346,13 +346,22 @@ def test_eval(model_str, threshold, model_cache_dir, processor_cache_dir, G_dir,
     
 
 def extract_params(model_str):
-    model_params = model_str.split("_")
-    k = int(model_params[0].split("k")[1])
-    r = int(model_params[1].split("r")[1])
-    alpha = float(model_params[2].split("alpha")[1])
-    tau = float(model_params[3].split("tau")[1])
-    lam = float(model_params[4].split("lam")[1])
-    return k,r,alpha,tau,lam
+    model_params = model_str.rstrip('.model').split("_")
+    if "cutoff" in model_str:
+        k = int(model_params[0].split("k")[1])
+        r = int(model_params[1].split("r")[1])
+        cutoff = float(model_params[2].split("cutoff")[1])
+        alpha = float(model_params[3].split("alpha")[1])
+        tau = float(model_params[4].split("tau")[1])
+        lam = float(model_params[5].split("lam")[1])
+        return k,r,cutoff,alpha,tau,lam
+    else:
+        k = int(model_params[0].split("k")[1])
+        r = int(model_params[1].split("r")[1])
+        alpha = float(model_params[2].split("alpha")[1])
+        tau = float(model_params[3].split("tau")[1])
+        lam = float(model_params[4].split("lam")[1])
+        return k,r,alpha,tau,lam
 
 #========================BASH SCRIPTING========================
 def main():

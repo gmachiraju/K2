@@ -367,6 +367,8 @@ def visualize_protein_sprite(sprite, prospect_flag=False):
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(sprite)
         norm = Normalize(vmin=-maxmag, vmax=maxmag)
+    else:
+        norm = lambda x: x
         
     struct = load_structure(sprite.graph['id'])
     color_resids = list(zip([rgb2hex(our_cmap(norm(x))) for x in nx.get_node_attributes(sprite, 'emb').values()], [x[1:] for x in nx.get_node_attributes(sprite, 'resid').values()]))
