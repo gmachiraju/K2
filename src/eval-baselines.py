@@ -87,9 +87,8 @@ def eval(model, dataloader, device):
             y_pred.extend(torch.sigmoid(out).cpu().tolist())
     return y_true, y_pred
     
-def gridsearch_iteration(loader, model_config):
+def gridsearch_iteration(loader, model, model_config, thresholds):
     model_results_dict = {} # returned object
-    thresholds = [np.round(el,1) for el in np.linspace(0,1,11)]
     
     for g, y in tqdm(loader):
         # g = g.to(device)
@@ -149,66 +148,96 @@ if __name__ == '__main__':
     parser.add_argument('--base_dir', type=str, default='../data')
     parser.add_argument('--metal', type=str, default='ZN')
     parser.add_argument('--run_name', type=str, default='baseline-GAT')
+    parser.add_argument('--eval_only', action='store_true')
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_config = ModelConfig(mode=ModelMode.binary_classification, task_level='graph', return_type='raw')
     
+    thresholds = [np.round(el,1) for el in np.linspace(0,1,31)]
     best_params = {}
-    for encoder in ['COLLAPSE', 'ESM', 'AA']:
-        # save_dir = os.path.join(args.base_dir, f'{encoder}_{args.metal}_{args.run_name}_gridsearch_results')
-        # results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir = setup_gridsearch(save_dir, encoder)
-        best_auprc = 0
-        best_auroc = 0
-        for cutoff in [6.0, 8.0]:
-            for lr in [1e-5, 0.0001, 0.0005]:
-                # print('on', encoder, args.metal, cutoff, lr)
-                run_name = args.run_name + f'-{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
-                if encoder == 'COLLAPSE':
-                    encoder_name = 'COLLAPSE'
-                    in_dim = 512
-                elif encoder == 'ESM':
-                    encoder_name = 'ESM'
-                    in_dim = 1280
-                elif encoder == 'AA':
-                    encoder_name = 'COLLAPSE'
-                    in_dim = 21
+    if args.eval_only:
+        baseline_top_models = \
+            {'COLLAPSE': ('COLLAPSE-ZN-8.0-0.0005', 0.7), \
+            'ESM': ('ESM-ZN-8.0-0.0005', 0.4), \
+            'AA': ('AA-ZN-8.0-0.0005', 0.5)}
+        for encoder in ['AA']:
+            if encoder == 'COLLAPSE':
+                encoder_name = 'COLLAPSE'
+                in_dim = 512
+            elif encoder == 'ESM':
+                encoder_name = 'ESM'
+                in_dim = 1280
+            elif encoder == 'AA':
+                encoder_name = 'COLLAPSE'
+                in_dim = 21
+            
+            cutoff = float(baseline_top_models[encoder][0].split('-')[2])
+            lr = float(baseline_top_models[encoder][0].split('-')[3])
+            thresh = baseline_top_models[encoder][1]
+            run_name = args.run_name + f'-{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
+            
+            # print(f'Evaluating {encoder} on test set with threshold {thresh}')
+            
+            test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_test_graphs"
+            test_dataset = ProteinData(test_graph_path, encoder)
+            test_loader = DataLoader(test_dataset, batch_size=1)
+            
+            model = GAT(in_dim, 100).to('cpu')
+            model.load_state_dict(torch.load(f'../data/baselines/{run_name}-best.pt'))
+            model.eval()
+            
+            model_results_dict = gridsearch_iteration(test_loader, model, model_config, thresholds=thresholds)
+            serialize(model_results_dict, os.path.join('../data/baselines', f'{encoder}_test_results.pkl'))
+    else:
+        for encoder in ['COLLAPSE', 'ESM', 'AA']:
+            save_dir = os.path.join(args.base_dir, f'{encoder}_{args.metal}_{args.run_name}_gridsearch_results')
+            results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir = setup_gridsearch(save_dir, encoder)
+            best_auprc = 0
+            best_auroc = 0
+            for cutoff in [8.0]:
+                for lr in [0.0005]:
+                    print('on', encoder, args.metal, cutoff, lr)
+                    run_name = args.run_name + f'-{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
+                    if encoder == 'COLLAPSE':
+                        encoder_name = 'COLLAPSE'
+                        in_dim = 512
+                    elif encoder == 'ESM':
+                        encoder_name = 'ESM'
+                        in_dim = 1280
+                    elif encoder == 'AA':
+                        encoder_name = 'COLLAPSE'
+                        in_dim = 21
 
-                model_str = f'{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
-                # train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_train_graphs"
-                # train_dataset = ProteinData(train_graph_path, encoder)
-                # train_loader = DataLoader(train_dataset, batch_size=1)
-                test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_test_graphs"
-                test_dataset = ProteinData(test_graph_path, encoder)
-                test_loader = DataLoader(test_dataset, batch_size=64)
-    
-                model = GAT(in_dim, 100).to(device)
-    
-                model.load_state_dict(torch.load(f'../data/baselines/{run_name}-best.pt'))
-                model = model.to(device)
-                model.eval()
-                
-                y_true, y_pred = eval(model, test_loader, device)
-                test_auroc = metrics.auroc(y_pred, y_true)
-                test_auprc = metrics.auprc(y_pred, y_true)
-                if test_auprc > best_auprc:
-                    best_auprc = test_auprc
-                    best_auroc = test_auroc
-                    best_params[encoder] = (cutoff, lr)
-        print(encoder)
-        print('\tBest Test AUROC:', best_auroc)
-        print('\tBest Test AUPRC:', best_auprc)
-        print('\tBest params:', best_params[encoder])
-                
-    for encoder in ['COLLAPSE', 'ESM', 'AA']:
-        print(f'Evaluating {encoder} on test set')
-        test_loader = DataLoader(test_dataset, batch_size=1)
+                    model_str = f'{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
+                    train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_train_graphs"
+                    train_dataset = ProteinData(train_graph_path, encoder)
+                    train_loader = DataLoader(train_dataset, batch_size=1)
+                    test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_test_graphs"
+                    test_dataset = ProteinData(test_graph_path, encoder)
+                    test_loader = DataLoader(test_dataset, batch_size=64)
         
-        model = GAT(in_dim, 100).to('cpu')
-        model.load_state_dict(torch.load(f'../data/baselines/{run_name}-best.pt'))
-        model.eval()
+                    model = GAT(in_dim, 100).to('cpu')
         
-        model_results_dict = gridsearch_iteration(test_loader, model_config)
-        # results_dict[model_str] = os.path.join(results_cache_dir, model_str) # save_path
-        serialize(model_results_dict, os.path.join('../data/baselines', f'{encoder}_test_results.pkl'))
-        # serialize(model, os.path.join(model_cache_dir, model_str))
+                    model.load_state_dict(torch.load(f'../data/baselines/{run_name}-best.pt'))
+                    # model = model.to(device)
+                    model.eval()
+                    
+                    if args.eval_only:
+                        y_true, y_pred = eval(model, test_loader, device)
+                        test_auroc = metrics.auroc(y_pred, y_true)
+                        test_auprc = metrics.auprc(y_pred, y_true)
+                        if test_auprc > best_auprc:
+                            best_auprc = test_auprc
+                            best_auroc = test_auroc
+                            best_params[encoder] = (cutoff, lr)
+                    else:
+                        model_results_dict = gridsearch_iteration(train_loader, model, model_config, thresholds)
+                        serialize(model_results_dict, os.path.join(results_cache_dir, model_str))
+                        serialize(model, os.path.join(model_cache_dir, model_str))
+            if args.eval_only:      
+                print(encoder)
+                print('\tBest Test AUROC:', best_auroc)
+                print('\tBest Test AUPRC:', best_auprc)
+                print('\tBest params:', best_params[encoder])
+            

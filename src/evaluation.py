@@ -351,6 +351,9 @@ def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cac
             "train_label_dict": label_dict}
     model_results_dict, _ =  gridsearch_iteration(model, model_args, gt_dir, thresh=threshold)
     
+    return get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics)
+
+def get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics):
     # evaluate using test_metrics
     valid_conf_metrics = ["specificity", "precision", "fnr", "fdr", "recall", "accuracy", "balanced_acc", "correlation", "threat_score", "prevalence", "dice", "jaccard"]
     valid_cont_metrics = ["auroc", "auprc", "ap"]
