@@ -16,6 +16,7 @@ from torch_geometric.utils.convert import from_networkx
 from torch_geometric.explain import Explainer, GNNExplainer, ModelConfig, ExplainerConfig, ThresholdConfig
 from torch_geometric.explain.config import ModelMode
 import wandb
+import metrics
 
 # import torch_geometric
 # print(torch_geometric.__version__)
@@ -44,7 +45,7 @@ def aa_quantize(S, quantizer):
     for node in S.nodes:
         embedding = S.nodes[node]['emb']
         motif_label = quantizer.predict(embedding)
-        aa_onehot = np.zeros(20)
+        aa_onehot = np.zeros(21)
         aa_onehot[motif_label] = 1
         S.nodes[node]['emb'] = aa_onehot.astype('float32')
     return S
@@ -84,14 +85,18 @@ def train_loop(model, dataloader, optimizer, criterion, device, epoch):
 def eval(model, dataloader, criterion, device):
     model.eval()
     losses = []
+    y_true = []
+    y_pred = []
     with torch.no_grad():
         for batch, y in dataloader:
             batch = batch.to(device)
+            y_true.extend(y.tolist())
             y = y.to(device)
             out = model(batch.x, batch.edge_index, batch.batch)
             loss = criterion(out, y)
+            y_pred.extend(torch.sigmoid(out).cpu().tolist())
             losses.append(loss.item())
-    return np.mean(losses)
+    return np.mean(losses), y_true, y_pred
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -119,7 +124,7 @@ if __name__ == '__main__':
         in_dim = 1280
     elif args.encoder == 'AA':
         encoder_name = 'COLLAPSE'
-        in_dim = 20
+        in_dim = 21
     
     train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{args.cutoff:.1f}_train_graphs"
     test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{args.cutoff:.1f}_test_graphs"
@@ -139,8 +144,8 @@ if __name__ == '__main__':
         best_loss = np.inf
         for epoch in range(args.epochs):
             train_loop(model, train_loader, optimizer, criterion, device, epoch)
-            train_loss = eval(model, train_loader, criterion, device)
-            test_loss = eval(model, test_loader, criterion, device)
+            train_loss, _, _ = eval(model, train_loader, criterion, device)
+            test_loss, _, _ = eval(model, test_loader, criterion, device)
             if test_loss < best_loss:
                 best_loss = test_loss
                 torch.save(model.state_dict(), f'../data/baselines/{args.run_name}-best.pt')
@@ -149,19 +154,36 @@ if __name__ == '__main__':
     
     quit()
     model.load_state_dict(torch.load(f'../data/baselines/{args.run_name}-best.pt'))
-    model = model.cpu()
+    model = model.to(device)
     model.eval()
+    
+    test_loss, y_true, y_pred = eval(model, test_loader, criterion, device)
+    test_auroc = metrics.auroc(y_pred, y_true)
+    test_auprc = metrics.auprc(y_pred, y_true)
+    print('Test AUROC:', test_auroc)
+    print('Test AUPRC:', test_auprc)
     
     train_loader = DataLoader(train_dataset, batch_size=1)
     
     model_config = ModelConfig(mode=ModelMode.binary_classification, task_level='graph', return_type='raw')
-    threshold_config = ThresholdConfig(threshold_type='hard', value=0.3)
-    explainer = Explainer(model, algorithm=GNNExplainer(), model_config=model_config, explanation_type='phenomenon', node_mask_type='object', threshold_config=threshold_config)
-    for g, y in train_loader:
-        print(y)
-        if y.squeeze() == 0:
-            continue
-        explanation = explainer(x=g.x, edge_index=g.edge_index, target=y.long())
-        print(explanation)
-        print(list(zip(list(explanation.node_mask.squeeze().numpy()), list(g.gt.numpy()))))
-        break
+    
+    thresholds = [np.round(el,1) for el in np.linspace(0,1,11)]
+    for t in thresholds:
+        threshold_config = ThresholdConfig(threshold_type='hard', value=t)
+        explainer = Explainer(model, algorithm=GNNExplainer(), model_config=model_config, explanation_type='phenomenon', node_mask_type='object', threshold_config=threshold_config)
+        precs = []
+        for g, y in train_loader:
+            g = g.to(device)
+            y = y.to(device)
+            if y.squeeze() == 0:
+                continue
+            explanation = explainer(x=g.x, edge_index=g.edge_index, target=y.long())
+            # print(explanation)
+            y_pred = explanation.node_mask.cpu().squeeze().numpy()
+            y_true = g.gt.cpu().numpy()
+            ravel = metrics.confusion(y_pred, y_true)
+            # ravel = confusion_matrix(P_bin_vec, Y_1hop)
+            precision = metrics.precision(ravel)
+            precs.append(precision)
+            break
+        print(t, np.mean(precision))

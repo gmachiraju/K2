@@ -42,37 +42,37 @@ for encoder in encoders:
         confusion_class1_models[metric_str] = (best_model, best_thresh)
     confusion_class1.append(row)
 
-    # print('Datum-level metrics')
-    # row = []
-    # for metric_str in cont_metrics:
-    #     best_model, best_score = top_model_preds(metric_str, results_cache_dir, model_cache_dir)
-    #     row.append(best_score)
-    # datum_level.append(row)
+    print('Datum-level metrics')
+    row = []
+    for metric_str in cont_metrics:
+        best_model, best_score = top_model_preds(metric_str, results_cache_dir, model_cache_dir)
+        row.append(best_score)
+    datum_level.append(row)
 
-    # print('Continuous metrics (avg)')
-    # row = []
-    # for metric_str in cont_metrics:
-    #     best_model, best_score = top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir)
-    #     row.append(best_score)
-    #     continuous_avg_models[metric_str] = best_model
-    # continuous_avg.append(row)
+    print('Continuous metrics (avg)')
+    row = []
+    for metric_str in cont_metrics:
+        best_model, best_score = top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir)
+        row.append(best_score)
+        continuous_avg_models[metric_str] = best_model
+    continuous_avg.append(row)
 
-    # print('Continuous metrics (iid)')
-    # row = []
-    # for metric_str in cont_metrics:
-    #     best_model, best_score = top_model_continuous_iid(metric_str, model_cache_dir, linearized_cache_dir)
-    #     row.append(best_score)
-    #     continuous_iid_models[metric_str] = best_model
-    # continuous_iid.append(row)
+    print('Continuous metrics (iid)')
+    row = []
+    for metric_str in cont_metrics:
+        best_model, best_score = top_model_continuous_iid(metric_str, model_cache_dir, linearized_cache_dir)
+        row.append(best_score)
+        continuous_iid_models[metric_str] = best_model
+    continuous_iid.append(row)
+    
+    serialize(confusion_all_models, f"../data/results/{encoder}_{metal}_confusion_all_train_models.pkl")
+    serialize(confusion_class1_models, f"../data/results/{encoder}_{metal}_confusion_class1_train_models.pkl")
+    serialize(datum_level_models, f"../data/results/{encoder}_{metal}_datum_level_train_models.pkl")
+    serialize(continuous_avg_models, f"../data/results/{encoder}_{metal}_continuous_avg_train_models.pkl")
+    serialize(continuous_iid_models, f"../data/results/{encoder}_{metal}_continuous_iid_train_models.pkl")
 
 pd.DataFrame(confusion_all, index=encoders, columns=conf_metrics).to_csv(f'../data/results/{metal}_confusion_all_train_scores.csv')
 pd.DataFrame(confusion_class1, index=encoders, columns=conf_metrics).to_csv(f'../data/results/{metal}_confusion_class1_train_scores.csv')
-# pd.DataFrame(datum_level, index=encoders, columns=cont_metrics).to_csv(f'../data/results/{metal}_datum_level_train_scores.csv')
-# pd.DataFrame(continuous_avg, index=encoders, columns=cont_metrics).to_csv(f'../data/results/{metal}_continuous_avg_train_scores.csv')
-# pd.DataFrame(continuous_iid, index=encoders, columns=cont_metrics).to_csv(f'../data/results/{metal}_continuous_iid_train_scores.csv')
-
-serialize(confusion_all_models, f"../data/results/{metal}_confusion_all_train_models.pkl")
-serialize(confusion_class1_models, f"../data/results/{metal}_confusion_class1_train_models.pkl")
-# serialize(datum_level_models, f"../data/results/{metal}_datum_level_train_models.pkl")
-# serialize(continuous_avg_models, f"../data/results/{metal}_continuous_avg_train_models.pkl")
-# serialize(continuous_iid_models, f"../data/results/{metal}_continuous_iid_train_models.pkl")
+pd.DataFrame(datum_level, index=encoders, columns=cont_metrics).to_csv(f'../data/results/{metal}_datum_level_train_scores.csv')
+pd.DataFrame(continuous_avg, index=encoders, columns=cont_metrics).to_csv(f'../data/results/{metal}_continuous_avg_train_scores.csv')
+pd.DataFrame(continuous_iid, index=encoders, columns=cont_metrics).to_csv(f'../data/results/{metal}_continuous_iid_train_scores.csv')

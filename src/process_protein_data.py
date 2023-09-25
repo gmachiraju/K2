@@ -79,7 +79,13 @@ def embed_esm(df, model, device):
     # batch_lens = (batch_tokens != alphabet.padding_idx).sum(1)
 
     with torch.no_grad():
-        results = model(batch_tokens.to(device), repr_layers=[33], return_contacts=True)
+        try:
+            results = model(batch_tokens.to(device), repr_layers=[33], return_contacts=True)
+        except RuntimeError as e:
+            if "CUDA out of memory" not in str(e): raise(e)
+            torch.cuda.empty_cache()
+            print('Skipped batch due to OOM', flush=True)
+            return
     embeddings = results["representations"][33]
     embeddings = embeddings.cpu().numpy()
     outdata = col.defaultdict(list)

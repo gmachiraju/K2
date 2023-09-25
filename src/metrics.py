@@ -91,6 +91,9 @@ def balanced_acc(ravel, adjusted=False):
     with np.errstate(divide="ignore", invalid="ignore"):
         # per_class = np.diag(C) / C.sum(axis=1) 
         per_class = np.diag(C) / C.sum(axis=0)
+    
+    if np.any(np.isnan(per_class)):
+        per_class = per_class[~np.isnan(per_class)]
         
     score = np.mean(per_class)
     if adjusted:
