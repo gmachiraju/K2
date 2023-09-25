@@ -72,6 +72,20 @@ class ProteinData(Dataset):
         graph = from_networkx(g_nx)
         graph.x = graph.emb
         return graph, float(graph.label)
+
+def eval(model, dataloader, device):
+    model.eval()
+    y_true = []
+    y_pred = []
+    with torch.no_grad():
+        for batch, y in dataloader:
+            batch = batch.to(device)
+            y_true.extend(y.tolist())
+            y = y.to(device)
+            out = model(batch.x, batch.edge_index, batch.batch)
+            # loss = criterion(out, y)
+            y_pred.extend(torch.sigmoid(out).cpu().tolist())
+    return y_true, y_pred
     
 def gridsearch_iteration(loader, model_config):
     model_results_dict = {} # returned object
@@ -159,19 +173,27 @@ if __name__ == '__main__':
 
                 model_str = f'{encoder}-{args.metal}-{cutoff:.1f}-{lr}'
                 train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_train_graphs"
-                # test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_test_graphs"
+                test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{cutoff:.1f}_test_graphs"
                 train_dataset = ProteinData(train_graph_path, encoder)
                 train_loader = DataLoader(train_dataset, batch_size=1)
-                # test_dataset = ProteinData(test_graph_path, args.encoder)
+                test_dataset = ProteinData(test_graph_path, encoder)
+                test_loader = DataLoader(test_dataset, batch_size=64)
     
                 model = GAT(in_dim, 100).to(device)
     
                 model.load_state_dict(torch.load(f'../data/baselines/{run_name}-best.pt'))
                 model = model.to(device)
                 model.eval()
+                
+                y_true, y_pred = eval(model, test_loader, device)
+                test_auroc = metrics.auroc(y_pred, y_true)
+                test_auprc = metrics.auprc(y_pred, y_true)
+                print('\tTest AUROC:', test_auroc)
+                print('\tTest AUPRC:', test_auprc)
+                
 
-                model_results_dict = gridsearch_iteration(train_loader, model_config)
-                results_dict[model_str] = os.path.join(results_cache_dir, model_str) # save_path
-                serialize(model_results_dict, os.path.join(results_cache_dir, model_str))
-                serialize(model, os.path.join(model_cache_dir, model_str))
+                # model_results_dict = gridsearch_iteration(train_loader, model_config)
+                # results_dict[model_str] = os.path.join(results_cache_dir, model_str) # save_path
+                # serialize(model_results_dict, os.path.join(results_cache_dir, model_str))
+                # serialize(model, os.path.join(model_cache_dir, model_str))
                 

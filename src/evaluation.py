@@ -41,9 +41,8 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
         if not np.isnan(cutoff):
             if encoder_name == 'AA':
                 encoder_name = 'COLLAPSE'
-            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
-            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
-        
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings_2.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs_2"
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
             # if process_args["embeddings_type"] == "memmap" and process_args["datatype"] == "histo":

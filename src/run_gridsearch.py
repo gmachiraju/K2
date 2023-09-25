@@ -38,7 +38,7 @@ if __name__=='__main__':
             "train_label_dict": None}
     
     sweep_dict = {"k": ks, "r": rs, "alpha": alphas, "tau": taus, "lambda": lambdas, "cutoff": cutoffs}
-    save_dir = f"../data/{encoder}_{metal}_gridsearch_results"
+    save_dir = f"../data/{encoder}_{metal}_gridsearch_results_2"
     gt_dir = None
 
     train_gridsearch(sweep_dict, save_dir, encoder, gt_dir, proc_args, model_args)

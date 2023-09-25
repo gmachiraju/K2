@@ -129,7 +129,7 @@ def dict2graph(emb_data, labels=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced.pkl')
+    parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced_2.pkl')
     parser.add_argument('--pdb_dir', type=str, default='/scratch/users/aderry/pdb')
     parser.add_argument('--metal', type=str, default='CA')
     parser.add_argument('--encoder', type=str, default='COLLAPSE')
@@ -152,7 +152,7 @@ if __name__ == '__main__':
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)
     
     train_embed_dict = {}
-    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs'
+    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs_2'
     os.makedirs(train_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(train_keyres.items(), 'train positive'):
@@ -188,10 +188,10 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             train_embed_dict[key] = emb_data['embeddings'][i]
     
-    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings.pkl')
+    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings_2.pkl')
     
     test_embed_dict = {}
-    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs'
+    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs_2'
     os.makedirs(test_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(test_keyres.items(), 'test positive'):
@@ -226,5 +226,5 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             test_embed_dict[key] = emb_data['embeddings'][i].astype('float')
     
-    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings.pkl')
+    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings_2.pkl')
     

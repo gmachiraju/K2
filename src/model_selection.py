@@ -13,6 +13,7 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
     valid_metrics = ["msd", "specificity", "precision", "fnr", "fdr", "recall", "accuracy", "balanced_acc", "correlation", "threat_score", "prevalence", "dice", "jaccard"]
     metric = check_eval_metric(metric_str, valid_metrics)
     metric_dict = {}
+    all_scores = {}
     stabilities = []
     for model_str in os.listdir(model_cache_dir):
         model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
@@ -60,11 +61,13 @@ def top_model_confusion(metric_str, results_cache_dir, model_cache_dir, eval_cla
         stability = max_score[1] - min_score[1]
         stabilities.append(stability)
         metric_dict[model_str] = (max_score[0], max_score[1], stability)
+        all_scores[model_str] = scores
     if return_all:
         data = []
-        for model_str, (_, score, _) in metric_dict.items():
-            data.append([model_str,score])
-        return pd.DataFrame(data, columns=['model_name', 'score'])
+        for model_str, scores in all_scores.items():
+            for thresh, score in scores:
+                data.append([model_str, thresh, score])
+        return pd.DataFrame(data, columns=['model_name', 'threshold', 'score'])
     else:
         # get top model
         top_model_str = max(metric_dict, key=lambda item: metric_dict[item][1])
@@ -91,7 +94,7 @@ def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir, ret
         metric_dict[model_str] = np.mean(scores)
     if return_all:
         data = []
-        for model_str, (_, score, _) in metric_dict.items():
+        for model_str, score in metric_dict.items():
             data.append([model_str,score])
         return pd.DataFrame(data, columns=['model_name', 'score'])
     else:
