@@ -1,10 +1,14 @@
 import utils
 
 def experiment_setup(encoder_name):
+    mapping_path = None
+    embed_type = "dict"
     if encoder_name == "tile2vec":
         embed_dict_path = "/home/lofi/lofi/src/outputs_tile2vec/train_sampled_inference_z_embeds.obj"
     elif encoder_name == "vit_iid":
-        embed_dict_path = "/home/lofi/lofi/src/outputs_vit/train_vit_iid_sampled_inference_z_embeds.obj"
+        mapping_path = "/home/lofi/lofi/src/outputs_vit_iid/train_vit_iid_chunkid_position.obj"
+        embed_type = "memmap"
+        embed_dict_path = "/home/lofi/lofi/src/outputs_vit_iid/train_vit_iid_sampled_inference_z_embeds.obj"
     elif encoder_name == "clip": 
         embed_dict_path = "/home/lofi/lofi/src/outputs_clip/train_clip_sampled_inference_z_embeds.obj"
     elif encoder_name == "plip":
@@ -31,13 +35,14 @@ def experiment_setup(encoder_name):
             "k": None,
             "quantizer_type": "kmeans",
             "embeddings_path": embed_dict_path,
-            "embeddings_type": "dict",
+            "embeddings_type": embed_type,
             "mapping_path": None,
             "sample_size": 4440,
             "sample_scheme": "random",
             "dataset_path": "/home/data/tinycam/train/train.hdf5",
             "verbosity": "low", # change this to low!
-            "so_dict_path": "/home/lofi/lofi/src/outputs/train_so_dict.obj"}
+            "so_dict_path": "/home/lofi/lofi/src/outputs/train_so_dict.obj",
+            "mapping_path": mapping_path}
 
     hparams = {"alpha": None, "tau": None, "lambda": None}
     label_dict = utils.deserialize("/home/k2/K2/src/outputs/refined_train_labeldict-" + encoder_name +".obj")

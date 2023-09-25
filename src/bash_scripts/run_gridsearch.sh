@@ -6,7 +6,7 @@ conda activate /home/envs
 
 # 2. Change these fields
 #------------------------
-encoder_name="tile2vec"
+encoder_name="vit_iid"
 #------------------------
 
 script="/home/k2/K2/src/evaluation.py"

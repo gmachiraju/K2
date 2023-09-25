@@ -25,21 +25,31 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
         model_args: dictionary of hyperparameters for model
     """
     results_dict, results_dir, results_cache_dir, proc_cache_dir, model_cache_dir, linearized_cache_dir = setup_gridsearch(save_dir, encoder_name)
-    num_ht = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["alpha"]) * len(sweep_dict["tau"]) * len(sweep_dict["cutoff"])
+    if "cutoff" in sweep_dict.keys():
+        num_ht = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["alpha"]) * len(sweep_dict["tau"]) * len(sweep_dict["cutoff"])
+    else:
+        num_ht = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["alpha"]) * len(sweep_dict["tau"])
     num_lm = len(sweep_dict["k"]) * len(sweep_dict["r"]) * len(sweep_dict["lambda"])
     print("We have %d models to train..." % (num_ht +  num_lm))
     print("...and have %d models trained so far!" % len(os.listdir(model_cache_dir)))
     print("="*40)
 
-    metal = process_args["metal"]
+    if "metal" in process_args.keys():
+        metal = process_args["metal"]
+    
     for cutoff in sweep_dict.get("cutoff", [np.nan]):
         if not np.isnan(cutoff):
             if encoder_name == 'AA':
                 encoder_name = 'COLLAPSE'
             process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
             model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
+        
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
+            # if process_args["embeddings_type"] == "memmap" and process_args["datatype"] == "histo":
+            #     serialize(proc, os.path.join(proc_cache_dir, processor_name)) # special case 
+            # else:
+            # pdb.set_trace()
             serialize_model(proc, os.path.join(proc_cache_dir, processor_name))
 
             for r in sweep_dict["r"]:
@@ -57,6 +67,7 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
                 for alpha in sweep_dict["alpha"]:
                     for tau in sweep_dict["tau"]:
                         print("Gridsearch: currently on hypothesis test with k=%d, r=%d, cutoff%f, alpha=%f, tau=%f" % (k, r, cutoff, alpha, tau))   
+                        
                         model, model_str = fetch_model(proc, r, model_cache_dir, model_args, cutoff=cutoff, alpha=alpha, tau=tau)
                         if model_str in results_dict.keys():
                             continue # already trained and stored
@@ -237,7 +248,11 @@ def fetch_model(proc, r, model_cache_dir, model_args, cutoff=np.nan, alpha=np.na
     Note: np.nan defaults allows us to overwrite and indicate which variant we are using
     """
     k = proc.k
-    model_name = "k%d_r%d_cutoff%.2f_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
+    if not np.isnan(cutoff):
+        model_name = "k%d_r%d_cutoff%.2f_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
+    else:   
+        model_name = "k%d_r%d_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, alpha, tau, lam)
+
     if model_name in os.listdir(model_cache_dir):
         print("Found fitted model for " + model_name)
         model = deserialize_model(os.path.join(model_cache_dir, model_name))
@@ -256,7 +271,11 @@ def fetch_processor(k, proc_cache_dir, process_args, cutoff=np.nan):
         proc_cache_dir: directory to store fitted processors
         process_args: dictionary of hyperparameters for processor
     """
-    processor_name = "k%d_cutoff%.2f.processor" % (k, cutoff)
+    if not np.isnan(cutoff):
+        processor_name = "k%d_cutoff%.2f.processor" % (k, cutoff)
+    else:
+        processor_name = "k%d.processor" % k    
+
     if processor_name in os.listdir(proc_cache_dir):
         print("Found fitted processor for k=%d, cutoff=%.2f" % (k, cutoff))
         proc = deserialize_model(os.path.join(proc_cache_dir, processor_name))

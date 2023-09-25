@@ -121,6 +121,8 @@ class K2Processor():
         self.mapping_dict = mapping_dict
         self.id_list = id_list
         array = self.partition_data()
+        # reassign embed_dict bc not needed anymore
+        self.embed_dict = None # causes pickling issues with memmap
         return array
 
     def partition_data(self):
