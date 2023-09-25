@@ -410,19 +410,26 @@ def get_test_metrics(model_results_dict, encoder, model_str, threshold, test_met
     valid_cont_metrics = ["auroc", "auprc", "ap"]
     outdata = []
     for G_name, data in model_results_dict.items():
+        # added for adaptive support
+        if threshold == "<" or threshold == ">":
+            adaptive = [key for key in data['thresh_cm'].keys() if type(key)==tuple]
+            t = [key for key in adaptive if key[0]==threshold][0]
+        else:
+            t = threshold
+
         y = get_label(data)
-        ravel = data['thresh_cm'][threshold]
+        ravel = data['thresh_cm'][t]
         for metric_str in test_metrics:
             if metric_str == 'msd':
-                val = data['thresh_msd'][threshold]
+                val = data['thresh_msd'][t]
             elif metric_str in valid_conf_metrics:
                 metric = check_eval_metric(metric_str, valid_conf_metrics)
                 val = metric(ravel)
                 if y == 1:
-                    outdata.append([encoder, model_str, threshold, G_name, 'class-1', metric_str, val])
+                    outdata.append([encoder, model_str, t, G_name, 'class-1', metric_str, val])
             elif metric_str in valid_cont_metrics:
                 val = data['cont'][metric_str]
-            outdata.append([encoder, model_str, threshold, G_name, 'all', metric_str, val])
+            outdata.append([encoder, model_str, t, G_name, 'all', metric_str, val])
     return pd.DataFrame(outdata, columns=['encoder', 'model', 'threshold', 'datum_id', 'regime', 'metric', 'value'])
     
 
