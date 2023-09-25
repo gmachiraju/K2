@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 # from tqdm.notebook import tqdm
 import pdb 
 import time
@@ -41,9 +42,8 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
         if not np.isnan(cutoff):
             if encoder_name == 'AA':
                 encoder_name = 'COLLAPSE'
-            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings.pkl"
-            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs"
-        
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings_2.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs_2"
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
             # if process_args["embeddings_type"] == "memmap" and process_args["datatype"] == "histo":
@@ -373,15 +373,22 @@ def few_hot_classification(P_probs, few=10):
 
  # Test eval
  # ===========   
-def test_eval(model_str, threshold, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image"):
+def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image"):
     """
     Test-set evaluation using top models extracted from training grid search
     SHOULD JUST CALL GRIDSEARCH_ITERATION
     """
     # get model params from model_str
-    k,r,alpha,tau,lam = extract_params(model_str)
-    hparams = {"alpha": alpha, "tau": tau, "lambda": lam}
-    processor = deserialize_model(os.path.join(processor_cache_dir, "k%d.processor" % k))
+    if modality == "image":
+        k,r,alpha,tau,lam = extract_params(model_str)
+        hparams = {"alpha": alpha, "tau": tau, "lambda": lam}
+        processor = deserialize_model(os.path.join(processor_cache_dir, "k%d.processor" % k))
+    elif modality == 'graph':
+        k,r,cutoff,alpha,tau,lam = extract_params(model_str)
+        hparams = {"alpha": alpha, "tau": tau, "lambda": lam}
+        processor = deserialize_model(os.path.join(processor_cache_dir, "k%d_cutoff%.2f.processor" % (k, cutoff)))
+        
+    encoder = processor_cache_dir.split('/')[-1].split("-")[0]
 
     # load model from string
     model = deserialize_model(os.path.join(model_cache_dir, model_str))
@@ -393,7 +400,30 @@ def test_eval(model_str, threshold, model_cache_dir, processor_cache_dir, G_dir,
             "hparams": hparams,
             "train_graph_path": G_dir,
             "train_label_dict": label_dict}
-    return gridsearch_iteration(model, model_args, gt_dir, thresh=threshold)
+    model_results_dict, _ =  gridsearch_iteration(model, model_args, gt_dir, thresh=threshold)
+    
+    return get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics)
+
+def get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics):
+    # evaluate using test_metrics
+    valid_conf_metrics = ["specificity", "precision", "fnr", "fdr", "recall", "accuracy", "balanced_acc", "correlation", "threat_score", "prevalence", "dice", "jaccard"]
+    valid_cont_metrics = ["auroc", "auprc", "ap"]
+    outdata = []
+    for G_name, data in model_results_dict.items():
+        y = get_label(data)
+        ravel = data['thresh_cm'][threshold]
+        for metric_str in test_metrics:
+            if metric_str == 'msd':
+                val = data['thresh_msd'][threshold]
+            elif metric_str in valid_conf_metrics:
+                metric = check_eval_metric(metric_str, valid_conf_metrics)
+                val = metric(ravel)
+                if y == 1:
+                    outdata.append([encoder, model_str, threshold, G_name, 'class-1', metric_str, val])
+            elif metric_str in valid_cont_metrics:
+                val = data['cont'][metric_str]
+            outdata.append([encoder, model_str, threshold, G_name, 'all', metric_str, val])
+    return pd.DataFrame(outdata, columns=['encoder', 'model', 'threshold', 'datum_id', 'regime', 'metric', 'value'])
     
 
 def extract_params(model_str):
@@ -413,6 +443,22 @@ def extract_params(model_str):
         tau = float(model_params[3].split("tau")[1])
         lam = float(model_params[4].split("lam")[1])
         return k,r,alpha,tau,lam
+
+def check_eval_metric(metric_str, valid_metrics):
+    if metric_str not in valid_metrics:
+        print("Error. Requested metric not available for evaluation.")
+        print("Please choose from: " + str(valid_metrics))
+        exit()
+    elif metric_str == "msd":
+        return eval("metrics.identity")
+    else:
+        return eval("metrics." + metric_str)
+
+def get_label(datum_results_dict):
+    cont_scores = datum_results_dict["cont"]
+    if np.isnan(cont_scores["auroc"]):
+        return 0
+    return 1
 
 #========================BASH SCRIPTING========================
 def main():
