@@ -13,7 +13,7 @@ cont_metrics = ["auroc", "auprc", "ap"]
 test_metrics = conf_metrics + cont_metrics
 
 encoder_top_models = \
-    {'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.9), \
+    {'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.95), \
     'ESM': ('k30_r1_cutoff4.00_alpha0.500_tau1.00_lamnan.model', 0.0), \
     'AA': ('k21_r1_cutoff8.00_alpha0.100_tau1.00_lamnan.model', 0.5)}
 
@@ -62,5 +62,5 @@ mean_pvt = mean_pvt[test_metrics]
 sem_pvt = sem_df.pivot(index=['encoder', 'method', 'regime'], columns='metric', values='value')
 sem_pvt = sem_pvt[test_metrics]
 
-mean_pvt.to_csv(f'../data/results/all_test_results_mean.csv')
-sem_pvt.to_csv(f'../data/results/all_test_results_sem.csv')
+mean_pvt.to_csv(f'../data/results/all_test_results_mean_2.csv')
+sem_pvt.to_csv(f'../data/results/all_test_results_sem_2.csv')

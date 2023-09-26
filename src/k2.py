@@ -664,12 +664,12 @@ class K2Model():
         sorted = nodes + edges
         return sorted
     
-    def visualize_prospect_graph(self, P):
+    def visualize_prospect_graph(self, P, labels=False):
         """
         Inputs:
             P: prospect graph
         """
-        utils.visualize_sprite(P, self.modality, prospect_flag=True)
+        utils.visualize_sprite(P, self.modality, prospect_flag=True, labels=labels)
     
     def visualize_prospect_map(self, P):
         prospect_map = utils.convert_graph2arr(P)
