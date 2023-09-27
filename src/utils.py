@@ -251,7 +251,7 @@ def get_prospect_range(P):
     maxmag = np.max([np.abs(minP), np.abs(maxP)])
     return maxmag
 
-def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, checking_flag=False):
+def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, checking_flag=False, labels=False):
     # Visualize sprite
     plt.figure()
     colors = list(nx.get_node_attributes(G, 'emb').values())
@@ -289,7 +289,10 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
         pos = nx.kamada_kawai_layout(G)
     
     if prospect_flag:
-        nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag, with_labels=True, labels=nx.get_node_attributes(G, 'resid'), font_size=6)
+        if labels:
+            nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag, with_labels=True, labels=nx.get_node_attributes(G, 'resid'), font_size=6)
+        else:
+            nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap, vmin=-maxmag, vmax=maxmag, font_size=6)
     else:
         nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap)
     plt.axis('off')
@@ -372,7 +375,7 @@ def load_structure(pdbc, pdb_dir='/scratch/users/aderry/pdb'):
     df = process_pdb(fname, chain=chain, include_hets=False)
     return df_to_bp(df)
     
-def visualize_protein_sprite(sprite, prospect_flag=False):
+def visualize_protein_sprite(sprite, prospect_flag=False, gt_flag=False):
     import nglview
     from matplotlib.colors import rgb2hex, Normalize
     
@@ -381,6 +384,9 @@ def visualize_protein_sprite(sprite, prospect_flag=False):
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(sprite)
         norm = Normalize(vmin=-maxmag, vmax=maxmag)
+    if gt_flag:
+        our_cmap = plt.get_cmap("bwr")
+        norm = Normalize(vmin=-1, vmax=1)
     else:
         norm = lambda x: x
         
@@ -388,7 +394,7 @@ def visualize_protein_sprite(sprite, prospect_flag=False):
     color_resids = list(zip([rgb2hex(our_cmap(norm(x))) for x in nx.get_node_attributes(sprite, 'emb').values()], [x[1:] for x in nx.get_node_attributes(sprite, 'resid').values()]))
     scheme = nglview.color._ColorScheme(color_resids, 'sprite')
     view = nglview.show_biopython(struct, default_representation=False)
-    view.add_cartoon("protein", color=scheme)
+    view.add_surface(color=scheme)
     return view
 
 class AAQuantizer(object):

@@ -20,8 +20,16 @@ test_metrics = conf_metrics + cont_metrics
 # from model selection
 if modality == "graph":
     encoder_list = ['COLLAPSE', 'ESM', 'AA']
+    # encoder_top_models = \
+    #     {'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.9), \
+    #     'ESM': ('k30_r1_cutoff4.00_alpha0.500_tau1.00_lamnan.model', 0.0), \
+    #     'AA': ('k21_r1_cutoff8.00_alpha0.100_tau1.00_lamnan.model', 0.5)}
+    # baseline_top_models = \
+    #     {'COLLAPSE': ('COLLAPSE-ZN-8.0-0.0005', 0.7), \
+    #     'ESM': ('ESM-ZN-8.0-0.0005', 0.4), \
+    #     'AA': ('AA-ZN-8.0-0.0005', 0.6)}
     encoder_top_models = \
-        {'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.9), \
+        {'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.95), \
         'ESM': ('k30_r1_cutoff4.00_alpha0.500_tau1.00_lamnan.model', 0.0), \
         'AA': ('k21_r1_cutoff8.00_alpha0.100_tau1.00_lamnan.model', 0.5)}
     baseline_top_models = \
@@ -44,6 +52,7 @@ elif modality == "image":
 #--------------------------------------------------
 # Above is hard-coded based on model selection
 #--------------------------------------------------
+
 
 # baseline results on test
 #=========================
@@ -128,9 +137,12 @@ sem_pvt = sem_df.pivot(index=['encoder', 'method', 'regime'], columns='metric', 
 sem_pvt = sem_pvt[test_metrics]
 
 if modality == "graph":
-    mean_pvt.to_csv(f'../data/results/all_test_results_mean.csv')
-    sem_pvt.to_csv(f'../data/results/all_test_results_sem.csv')
+    # mean_pvt.to_csv(f'../data/results/all_test_results_mean.csv')
+    # sem_pvt.to_csv(f'../data/results/all_test_results_sem.csv')
+    mean_pvt.to_csv(f'../data/results/all_test_results_mean_2.csv')
+    sem_pvt.to_csv(f'../data/results/all_test_results_sem_2.csv')
 elif modality == "image":
     mean_pvt.to_csv('/home/k2/K2/src/outputs/k2-test/all_test_results_mean.csv')
     sem_pvt.to_csv('/home/k2/K2/src/outputs/k2-test/all_test_results_sem.csv')
     combined_df.to_csv('/home/k2/K2/src/outputs/k2-test/all_test_results_points.csv') # graph-level results
+

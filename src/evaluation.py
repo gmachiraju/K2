@@ -220,6 +220,9 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds):
     # Continuous & IID eval
     #----------------------
     P_vec = linearize_graph(P_scaled)
+    if y == 1:
+        print(G_name)
+        print(P_vec)
     Y_vec = linearize_graph(Y)
     datum_linearized = (P_vec, Y_vec) # store for IID eval
     # _dict[(G_name, y)]
