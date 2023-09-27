@@ -85,7 +85,7 @@ def gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_c
 
 # Helper functions
 #=================
-def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
+def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
     """
     This function can be used as a part of a grid search or for a single model/threshold (testing)
     Inputs:
@@ -110,7 +110,11 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
         if model_args["modality"] == "graph":
             Y = set_graph_emb(G, 'gt')
         else:
-            Y = deserialize(os.path.join(gt_dir, G_name + "_gt")) # groud truth
+            if arm == "train":
+                Y = deserialize(os.path.join(gt_dir, G_name + "_gt")) # groud truth
+            elif arm == "test":
+                Y = deserialize(os.path.join(gt_dir, G_name + "-graph")) # groud truth
+
         if model.processor.quantizer_type == "AA":
             G = set_graph_emb(G, 'resid')
         P = model.prospect(G)
@@ -120,8 +124,10 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all"):
             thresholds[idx_adaptive + 1] = ("<", threshold_a) # adaptive backward
 
         # get label
-        if model.train_label_dict: # loaded a dict
+        if model.train_label_dict and arm == "train": # loaded a dict
             y = model.train_label_dict[G_name]
+        elif model.train_label_dict and arm == "test": # loaded a dict
+            y = model_args["train_label_dict"][G_name]
         else: # internally stored in graph
             y = G.graph["label"]
         
@@ -373,7 +379,7 @@ def few_hot_classification(P_probs, few=10):
 
  # Test eval
  # ===========   
-def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image"):
+def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image", arm="train"):
     """
     Test-set evaluation using top models extracted from training grid search
     SHOULD JUST CALL GRIDSEARCH_ITERATION
@@ -389,19 +395,23 @@ def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cac
         processor = deserialize_model(os.path.join(processor_cache_dir, "k%d_cutoff%.2f.processor" % (k, cutoff)))
         
     encoder = processor_cache_dir.split('/')[-1].split("-")[0]
+    if modality == "image":
+        encoder_terms = {"vit_iid": "ViT", "clip": "CLIP", "plip": "PLIP"}
+        if encoder in encoder_terms.keys():
+            encoder = encoder_terms[encoder]
 
     # load model from string
     model = deserialize_model(os.path.join(model_cache_dir, model_str))
     # pass to gridsearch iteration
-    model_args = {"modality":modality,
-            "processor": processor,
-            "r": r,
-            "variant": None,
-            "hparams": hparams,
-            "train_graph_path": G_dir,
-            "train_label_dict": label_dict}
-    model_results_dict, _ =  gridsearch_iteration(model, model_args, gt_dir, thresh=threshold)
+    model_args = {"modality": modality,
+                  "processor": processor,
+                  "r": r,
+                  "variant": None,
+                  "hparams": hparams,
+                  "train_graph_path": G_dir,
+                  "train_label_dict": label_dict}
     
+    model_results_dict, _ = gridsearch_iteration(model, model_args, gt_dir, thresh=threshold, arm=arm)    
     return get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics)
 
 def get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics):

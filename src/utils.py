@@ -212,8 +212,7 @@ def convert_arr2graph_GfromGT(G_gt, arr):
     for node in G.nodes():
         i,j = G.nodes[node]['pos']
         if arr is not None: # class-1
-            G.nodes[node]['emb'] = int(arr[i,j])
-            # print("gt[i,j]:", gt[i,j])
+            G.nodes[node]['emb'] = float(arr[i,j][0])
         else:
             G.nodes[node]['emb'] = 0 # class-0: ground truth is all zeros
     return G
@@ -256,7 +255,8 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
     # Visualize sprite
     plt.figure()
     colors = list(nx.get_node_attributes(G, 'emb').values())
-    if checking_flag:
+    print(colors)
+    if checking_flag == True:
         colors = [1 for c in colors]
     else:
         colors = [int(c) for c in colors]
