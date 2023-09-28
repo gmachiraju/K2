@@ -309,6 +309,16 @@ def convert_graph2arr(S):
         A[i,j,:] = S.nodes[node]['emb']
     return A
 
+def convert_GTgraph2arr(S):
+    h,w = S.graph["array_size"]
+    d = 1
+    A = np.zeros((h,w,d)) 
+
+    for node in S.nodes():
+        i,j = S.nodes[node]['pos']
+        A[i,j,:] = S.nodes[node]['emb']
+    return A
+
 #==========================================
 # utility functions for visualizing arrays
 #==========================================
@@ -360,7 +370,22 @@ def visualize_quantizedZ(Z_viz, prospect_flag=False):
         plt.colorbar() 
     else:
         plt.imshow(Z_viz, cmap=custom_cmap)
+        plt.colorbar() 
     plt.show()
+
+def visualize_GTmap(arr, sprite_arr):
+    maxmag = get_prospect_range(arr)
+    basemap = np.where(sprite_arr > 0, -maxmag/8, 0) # light bluw
+    new_map = np.where(arr > 0, maxmag, basemap)
+
+    plt.figure(figsize=(18, 12), dpi=100)
+    plt.yticks([])
+    plt.xticks([])
+    plt.axis('off')
+    plt.imshow(new_map, cmap=plt.get_cmap("bwr"), vmin=-maxmag, vmax=maxmag)
+    plt.colorbar() 
+    plt.show()
+    
     
 #===========================================
 # utility functions for visualizing proteins
