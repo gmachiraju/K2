@@ -6,6 +6,8 @@ import pdb
 import time
 from copy import copy
 import argparse
+import networkx as nx
+import utils
 
 from utils import serialize, deserialize, serialize_model, deserialize_model
 from utils import compute_adaptive_thresh_graph, compute_adaptive_thresh_vec
@@ -221,8 +223,9 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds):
     #----------------------
     P_vec = linearize_graph(P_scaled)
     if y == 1:
-        print(G_name)
-        print(P_vec)
+        # print(G_name)
+        # print(P_vec)
+        pass
     Y_vec = linearize_graph(Y)
     datum_linearized = (P_vec, Y_vec) # store for IID eval
     # _dict[(G_name, y)]
@@ -444,7 +447,6 @@ def get_test_metrics(model_results_dict, encoder, model_str, threshold, test_met
                 val = data['cont'][metric_str]
             outdata.append([encoder, model_str, t, G_name, 'all', metric_str, val])
     return pd.DataFrame(outdata, columns=['encoder', 'model', 'threshold', 'datum_id', 'regime', 'metric', 'value'])
-    
 
 def extract_params(model_str):
     model_params = model_str.rstrip('.model').split("_")
@@ -479,6 +481,108 @@ def get_label(datum_results_dict):
     if np.isnan(cont_scores["auroc"]):
         return 0
     return 1
+
+# Properties of embed/regions
+#==============================
+def num_cc(G):
+    G_drop = G.copy()
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    size_cc = [len(c) for c in nx.connected_components(G_drop)]
+    return len(size_cc)
+
+def compute_test_ccs(gts_path):
+    """
+    num ccs
+    """
+    mcss = {}
+    for gt_file in os.listdir(gts_path):
+        gt_id = gt_file.split("-")[0:2]
+        gt_id = '-'.join(gt_id)
+        gt_path = os.path.join(gts_path, gt_file)
+        gt = deserialize(gt_path)
+        mcss[gt_id] = num_cc(gt)
+    return mcss
+
+def mean_cc_size(G):
+    G_drop = G.copy()
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    size_cc = [len(c) for c in nx.connected_components(G_drop)]
+    return np.sum(size_cc) / len(size_cc) # prevalence / num CC
+
+def compute_test_mcs(gts_path):
+    """
+    mean component size
+    """
+    mcss = {}
+    for gt_file in os.listdir(gts_path):
+        gt_id = gt_file.split("-")[0:2]
+        gt_id = '-'.join(gt_id)
+        gt_path = os.path.join(gts_path, gt_file)
+        gt = deserialize(gt_path)
+        mcss[gt_id] = mean_cc_size(gt)
+    return mcss    
+
+def mean_region_dispersion(G):
+    G_drop = G.copy()
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    size_cc = [len(c) for c in nx.connected_components(G_drop)]
+    return len(size_cc) / np.mean(size_cc) # num ccs / mean size
+
+def compute_test_mrds(gts_path):
+    mrds = {}
+    for gt_file in os.listdir(gts_path):
+        gt_id = gt_file.split("-")[0:2]
+        gt_id = '-'.join(gt_id)
+        gt_path = os.path.join(gts_path, gt_file)
+        gt = deserialize(gt_path)
+        mrds[gt_id] = mean_region_dispersion(gt)
+    return mrds
+
+def region_prevalence(G):
+    mask_vals = list(nx.get_node_attributes(G, "emb").values())
+    return np.sum(mask_vals) / len(mask_vals)
+    
+def compute_test_rps(gts_path):
+    rps = {}
+    for gt_file in os.listdir(gts_path):
+        gt_id = gt_file.split("-")[0:2]
+        gt_id = '-'.join(gt_id)
+        gt_path = os.path.join(gts_path, gt_file)
+        gt = deserialize(gt_path)
+        rps[gt_id] = region_prevalence(gt)
+    return rps
+
+# def compute_seg_per_config(encoder_alias, model_str, threshold, cache_dir, Gs_dir, gts_dir, label_dict_path):
+#     """
+#     Takes top model per encoder and compares segmentation auprc per test example
+#     """
+#     cache_dir = cache_dir + encoder_alias + "_gridsearch/"
+#     Gs_dir = Gs_dir + encoder_alias
+#     gts_dir = gts_dir + encoder_alias
+#     label_dict = utils.deserialize(label_dict_path + encoder_alias + ".obj")
+
+#     results_cache_dir = cache_dir + encoder_alias + "-eval_results"
+#     model_cache_dir = cache_dir + encoder_alias + "-fitted_k2_models"
+#     processor_cache_dir = cache_dir + encoder_alias + "-fitted_k2_processors"
+#     linearized_cache_dir = cache_dir + encoder_alias + "-linearized_data"
+#     test_metrics = ["auprc"]
+
+#     df = test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, Gs_dir, gt_dir=gts_dir, label_dict=label_dict, modality="image", arm="test")
+#     return df
+
+# def compute_seg_all_configs(encoder_top_models, cache_dir, Gs_dir, gts_dir, label_dict_path):
+#     test_df = []
+#     for encoder, (model_str, threshold) in encoder_top_models.items():
+#         print(encoder)
+#         if encoder == "ViT":
+#             encoder_alias = "vit_iid"
+#         else:
+#             encoder_alias = encoder.lower()
+#         df = compute_seg_per_config(encoder_alias, model_str, threshold, cache_dir, Gs_dir, gts_dir, label_dict_path)
+#         test_df.append(df)
+#     test_df = pd.concat(test_df)
+#     return test_df
+
 
 #========================BASH SCRIPTING========================
 def main():

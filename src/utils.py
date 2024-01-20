@@ -189,6 +189,36 @@ def convert_arr2graph(Z):
     G.graph.update({'pos_dict': lin2grid_map})
     return G
 
+def convert_text2graph(Z):
+    """
+    Convert embedded text (Array of embeddings) to map graph
+    """
+    G = nx.Graph(origin=(None, None))
+    l,d = Z.shape[0], Z.shape[1]
+    G.graph.update({'array_size': (l)})
+    G.graph.update({'d': d})
+
+    origin_flag = False
+    for i in range(l):
+        if origin_flag == False:
+            G.graph.update({'origin': (i)})
+            origin_flag = True
+        embed = Z[i,:].reshape(1, -1).astype('double')
+        G.add_node(i, pos=i, emb=embed)
+        
+    nodelist = list(G.nodes())
+    for node in nodelist:
+        i = G.nodes[node]["pos"] # same as "node"
+        for di in range(i-2, i+3):
+            if di == i:
+                continue
+            if di < 0 or di >= l:
+                continue
+            G.add_edge(node, di, weight=1)
+
+    G.graph.update({'pos_dict': None})
+    return G
+
 def convert_arr2graph_gt(gt, G):
     """
     gt: ground truth array
@@ -385,7 +415,6 @@ def visualize_GTmap(arr, sprite_arr):
     plt.imshow(new_map, cmap=plt.get_cmap("bwr"), vmin=-maxmag, vmax=maxmag)
     plt.colorbar() 
     plt.show()
-    
     
 #===========================================
 # utility functions for visualizing proteins
