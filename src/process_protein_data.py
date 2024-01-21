@@ -42,14 +42,16 @@ def create_splits(database, metal):
     db = database[metal]
     db_pos, db_neg = db['pos'], db['neg']
     
-    num_pos_ec = db_pos['EC_NUMBER'].unique()
-    train_ec, test_ec = train_test_split(num_pos_ec, test_size=0.2, random_state=SEED)
-    train_df = db_pos[db_pos['EC_NUMBER'].isin(train_ec)]
-    test_df = db_pos[db_pos['EC_NUMBER'].isin(test_ec)]
+    unique_cath = db_pos['CATH'].unique()
+    train_cath, test_cath = train_test_split(unique_cath, test_size=0.2, random_state=SEED)
+    train_df = db_pos[db_pos['CATH'].isin(train_cath)]
+    test_df = db_pos[db_pos['CATH'].isin(test_cath)]
     train_keyres = dict(train_df.groupby('pdb_chain')['interactions'].apply(lambda x: [i for i in sum(x, []) if i.split('_')[0] in atom_info.aa]))
     test_keyres = dict(test_df.groupby('pdb_chain')['interactions'].apply(lambda x: [i for i in sum(x, []) if i.split('_')[0] in atom_info.aa]))
     
-    train_neg_pdb, test_neg_pdb = train_test_split(db_neg['pdb_chain'].unique(), test_size=0.2, random_state=SEED)
+    train_neg_pdb = db_neg[db_neg['CATH'].isin(train_cath)]['pdb_chain'].unique()
+    test_neg_pdb = db_neg[db_neg['CATH'].isin(test_cath)]['pdb_chain'].unique()
+    
     return train_keyres, test_keyres, train_neg_pdb, test_neg_pdb
 
 def compute_adjacency(df, resids, r):
@@ -101,7 +103,11 @@ def embed_esm(df, model, device):
 
 def embed_pdb(encoder, pdb_chain, pdb_dir, model, device, r):
     pdb, chain = pdb_chain[:4], pdb_chain[-1]
-    atom_df = process_pdb(os.path.join(pdb_dir, pdb[1:3], f'pdb{pdb}.ent.gz'), chain=chain, include_hets=False)
+    try:
+        atom_df = process_pdb(os.path.join(pdb_dir, pdb[1:3], f'pdb{pdb}.ent.gz'), chain=chain, include_hets=False)
+    except FileNotFoundError:
+        print(f'{pdb_chain} file not found')
+        return
     if encoder == 'COLLAPSE':
         try:
             outdata = embed_protein(atom_df.copy(), model, device=device, include_hets=False, env_radius=10.0)
@@ -129,7 +135,7 @@ def dict2graph(emb_data, labels=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced_2.pkl')
+    parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced_cath.pkl')
     parser.add_argument('--pdb_dir', type=str, default='/scratch/users/aderry/pdb')
     parser.add_argument('--metal', type=str, default='CA')
     parser.add_argument('--encoder', type=str, default='COLLAPSE')
@@ -152,7 +158,7 @@ if __name__ == '__main__':
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)
     
     train_embed_dict = {}
-    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs_2'
+    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs'
     os.makedirs(train_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(train_keyres.items(), 'train positive'):
@@ -188,10 +194,10 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             train_embed_dict[key] = emb_data['embeddings'][i]
     
-    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings_2.pkl')
+    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings_cath.pkl')
     
     test_embed_dict = {}
-    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs_2'
+    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs_cath'
     os.makedirs(test_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(test_keyres.items(), 'test positive'):
@@ -226,5 +232,5 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             test_embed_dict[key] = emb_data['embeddings'][i].astype('float')
     
-    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings_2.pkl')
+    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings_cath.pkl')
     

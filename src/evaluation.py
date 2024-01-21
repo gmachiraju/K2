@@ -37,15 +37,15 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
     print("...and have %d models trained so far!" % len(os.listdir(model_cache_dir)))
     print("="*40)
 
-    if "metal" in process_args.keys():
-        metal = process_args["metal"]
+    if "dataset" in process_args.keys():
+        dataset = process_args["dataset"]
     
     for cutoff in sweep_dict.get("cutoff", [np.nan]):
         if not np.isnan(cutoff):
             if encoder_name == 'AA':
                 encoder_name = 'COLLAPSE'
-            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings_2.pkl"
-            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs_2"
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_embeddings.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_graphs"
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
             # if process_args["embeddings_type"] == "memmap" and process_args["datatype"] == "histo":
@@ -222,10 +222,6 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds):
     # Continuous & IID eval
     #----------------------
     P_vec = linearize_graph(P_scaled)
-    if y == 1:
-        # print(G_name)
-        # print(P_vec)
-        pass
     Y_vec = linearize_graph(Y)
     datum_linearized = (P_vec, Y_vec) # store for IID eval
     # _dict[(G_name, y)]
@@ -312,9 +308,9 @@ def fetch_model(proc, r, model_cache_dir, model_args, cutoff=np.nan, alpha=np.na
     """
     k = proc.k
     if not np.isnan(cutoff):
-        model_name = "k%d_r%d_cutoff%.2f_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
+        model_name = "k%d_r%d_cutoff%.2f_alpha%.4f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
     else:   
-        model_name = "k%d_r%d_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, alpha, tau, lam)
+        model_name = "k%d_r%d_alpha%.4f_tau%.2f_lam%.2f.model" % (k, r, alpha, tau, lam)
 
     if model_name in os.listdir(model_cache_dir):
         print("Found fitted model for " + model_name)

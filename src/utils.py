@@ -438,17 +438,17 @@ def visualize_protein_sprite(sprite, prospect_flag=False, gt_flag=False):
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(sprite)
         norm = Normalize(vmin=-maxmag, vmax=maxmag)
-    if gt_flag:
+    elif gt_flag:
         our_cmap = plt.get_cmap("bwr")
         norm = Normalize(vmin=-1, vmax=1)
     else:
         norm = lambda x: x
-        
+    
     struct = load_structure(sprite.graph['id'])
-    color_resids = list(zip([rgb2hex(our_cmap(norm(x))) for x in nx.get_node_attributes(sprite, 'emb').values()], [x[1:] for x in nx.get_node_attributes(sprite, 'resid').values()]))
+    color_resids = list(zip([rgb2hex(our_cmap(norm(x))) for x in list(nx.get_node_attributes(sprite, 'emb').values())], [x[1:] for x in list(nx.get_node_attributes(sprite, 'resid').values())]))
     scheme = nglview.color._ColorScheme(color_resids, 'sprite')
     view = nglview.show_biopython(struct, default_representation=False)
-    view.add_surface(color=scheme)
+    view.add_cartoon(color=scheme)
     return view
 
 class AAQuantizer(object):

@@ -466,13 +466,23 @@ class K2Model():
         mu0 = np.mean(X0, axis=0)
         mu1 = np.mean(X1, axis=0)
         log2fc = np.log2((mu1 + EPS)/(mu0 + EPS))
+        # print(np.min(log2fc), np.max(log2fc))
+        # print(np.round(log2fc, 2))
+        print(np.where(np.abs(log2fc) > tau))
 
         # compute p-values between classes
         pvals = []
         p = X0.shape[1]
         for idx in range(p):
             _, pval = scipy.stats.mannwhitneyu(X1[:,idx], X0[:,idx])
-            pvals.append(pval / p) # bonferroni correction
+            pvals.append(pval * p) # bonferroni correction
+        # print(np.max(pvals), np.min(pvals))
+        # print(np.max(np.array(pvals)*p), np.min(np.array(pvals)*p))
+        # pvals = scipy.stats.false_discovery_control(pvals, method='bh')
+        
+        # print(np.max(pvals), np.min(pvals))
+        # print(np.round(pvals, 4))
+        print(np.where(np.array(pvals) < alpha))
         
         # building a mask to "regularize"/squash features to zero
         sig_mask = []
