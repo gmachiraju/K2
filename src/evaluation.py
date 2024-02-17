@@ -480,13 +480,13 @@ def get_label(datum_results_dict):
 
 # Properties of embed/regions
 #==============================
-def num_cc(G):
+def num_cc(G, gt_key='emb'):
     G_drop = G.copy()
-    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n][gt_key] == 0])
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return len(size_cc)
 
-def compute_test_ccs(gts_path):
+def compute_test_ccs(gts_path, gt_key='emb'):
     """
     num ccs
     """
@@ -496,16 +496,16 @@ def compute_test_ccs(gts_path):
         gt_id = '-'.join(gt_id)
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        mcss[gt_id] = num_cc(gt)
+        mcss[gt_id] = num_cc(gt, gt_key)
     return mcss
 
-def mean_cc_size(G):
+def mean_cc_size(G, gt_key='emb'):
     G_drop = G.copy()
-    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n][gt_key] == 0])
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return np.sum(size_cc) / len(size_cc) # prevalence / num CC
 
-def compute_test_mcs(gts_path):
+def compute_test_mcs(gts_path, gt_key='emb'):
     """
     mean component size
     """
@@ -515,37 +515,37 @@ def compute_test_mcs(gts_path):
         gt_id = '-'.join(gt_id)
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        mcss[gt_id] = mean_cc_size(gt)
+        mcss[gt_id] = mean_cc_size(gt, gt_key)
     return mcss    
 
-def mean_region_dispersion(G):
+def mean_region_dispersion(G, gt_key='emb'):
     G_drop = G.copy()
-    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n][gt_key] == 0])
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return len(size_cc) / np.mean(size_cc) # num ccs / mean size
 
-def compute_test_mrds(gts_path):
+def compute_test_mrds(gts_path, gt_key='emb'):
     mrds = {}
     for gt_file in os.listdir(gts_path):
         gt_id = gt_file.split("-")[0:2]
         gt_id = '-'.join(gt_id)
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        mrds[gt_id] = mean_region_dispersion(gt)
+        mrds[gt_id] = mean_region_dispersion(gt, gt_key)
     return mrds
 
-def region_prevalence(G):
-    mask_vals = list(nx.get_node_attributes(G, "emb").values())
+def region_prevalence(G, gt_key='emb'):
+    mask_vals = list(nx.get_node_attributes(G, gt_key).values())
     return np.sum(mask_vals) / len(mask_vals)
     
-def compute_test_rps(gts_path):
+def compute_test_rps(gts_path, gt_key='emb'):
     rps = {}
     for gt_file in os.listdir(gts_path):
         gt_id = gt_file.split("-")[0:2]
         gt_id = '-'.join(gt_id)
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        rps[gt_id] = region_prevalence(gt)
+        rps[gt_id] = region_prevalence(gt, gt_key)
     return rps
 
 # def compute_seg_per_config(encoder_alias, model_str, threshold, cache_dir, Gs_dir, gts_dir, label_dict_path):

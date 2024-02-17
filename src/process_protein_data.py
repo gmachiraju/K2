@@ -41,17 +41,15 @@ random.seed(SEED)
 def create_splits(database, metal):
     db = database[metal]
     db_pos, db_neg = db['pos'], db['neg']
-    
-    unique_cath = db_pos['CATH'].unique()
-    train_cath, test_cath = train_test_split(unique_cath, test_size=0.2, random_state=SEED)
-    train_df = db_pos[db_pos['CATH'].isin(train_cath)]
-    test_df = db_pos[db_pos['CATH'].isin(test_cath)]
+
+    num_pos_pdb = db_pos['pdb_chain'].unique()
+    train_pdb, test_pdb = train_test_split(num_pos_pdb, test_size=0.2, random_state=SEED)
+    train_df = db_pos[db_pos['pdb_chain'].isin(train_pdb)]
+    test_df = db_pos[db_pos['pdb_chain'].isin(test_pdb)]
     train_keyres = dict(train_df.groupby('pdb_chain')['interactions'].apply(lambda x: [i for i in sum(x, []) if i.split('_')[0] in atom_info.aa]))
     test_keyres = dict(test_df.groupby('pdb_chain')['interactions'].apply(lambda x: [i for i in sum(x, []) if i.split('_')[0] in atom_info.aa]))
     
-    train_neg_pdb = db_neg[db_neg['CATH'].isin(train_cath)]['pdb_chain'].unique()
-    test_neg_pdb = db_neg[db_neg['CATH'].isin(test_cath)]['pdb_chain'].unique()
-    
+    train_neg_pdb, test_neg_pdb = train_test_split(db_neg['pdb_chain'].unique(), test_size=0.2, random_state=SEED)
     return train_keyres, test_keyres, train_neg_pdb, test_neg_pdb
 
 def compute_adjacency(df, resids, r):
@@ -103,11 +101,7 @@ def embed_esm(df, model, device):
 
 def embed_pdb(encoder, pdb_chain, pdb_dir, model, device, r):
     pdb, chain = pdb_chain[:4], pdb_chain[-1]
-    try:
-        atom_df = process_pdb(os.path.join(pdb_dir, pdb[1:3], f'pdb{pdb}.ent.gz'), chain=chain, include_hets=False)
-    except FileNotFoundError:
-        print(f'{pdb_chain} file not found')
-        return
+    atom_df = process_pdb(os.path.join(pdb_dir, pdb[1:3], f'pdb{pdb}.ent.gz'), chain=chain, include_hets=False)
     if encoder == 'COLLAPSE':
         try:
             outdata = embed_protein(atom_df.copy(), model, device=device, include_hets=False, env_radius=10.0)
@@ -135,9 +129,9 @@ def dict2graph(emb_data, labels=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced_cath.pkl')
-    parser.add_argument('--pdb_dir', type=str, default='/scratch/users/aderry/pdb')
-    parser.add_argument('--metal', type=str, default='CA')
+    parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced_2.pkl')
+    parser.add_argument('--pdb_dir', type=str, default='../../pdb/localpdb/mirror/pdb')
+    parser.add_argument('--metal', type=str, default='ZN')
     parser.add_argument('--encoder', type=str, default='COLLAPSE')
     parser.add_argument('--nn_radius', type=float, default=8.0)
     args = parser.parse_args()
@@ -156,9 +150,13 @@ if __name__ == '__main__':
     
     database = deserialize(args.dataset)
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)
+    print(set(list(train_keyres.keys())).intersection(set(list(test_keyres.keys()))))
+    print(set(list(train_keyres.keys())).intersection(set(test_neg)))
+    print(set(train_neg).intersection(set(test_neg)))
+    print(set(train_neg).intersection(set(list(test_keyres.keys()))))
     
     train_embed_dict = {}
-    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs'
+    train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs_2'
     os.makedirs(train_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(train_keyres.items(), 'train positive'):
@@ -194,10 +192,10 @@ if __name__ == '__main__':
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             train_embed_dict[key] = emb_data['embeddings'][i]
     
-    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings_cath.pkl')
+    serialize(train_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_embeddings_2.pkl')
     
     test_embed_dict = {}
-    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs_cath'
+    test_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_graphs_2'
     os.makedirs(test_graph_dir, exist_ok=True)
     
     for pdbc, res in tqdm(test_keyres.items(), 'test positive'):
@@ -213,6 +211,8 @@ if __name__ == '__main__':
         
         G = dict2graph(emb_data, labels)
         G.graph.update({'id': pdbc, 'label': 1})
+        if f'{pdbc}.pkl' in train_graph_dir:
+            print(pdbc)
         serialize(G, os.path.join(test_graph_dir, f'{pdbc}.pkl'))
 
         for i in range(len(emb_data['embeddings'])):
@@ -226,11 +226,13 @@ if __name__ == '__main__':
         
         G = dict2graph(emb_data)
         G.graph.update({'id': pdbc, 'label': 0})
+        if f'{pdbc}.pkl' in train_graph_dir:
+            print(pdbc)
         serialize(G, os.path.join(test_graph_dir, f'{pdbc}.pkl'))
         
         for i in range(len(emb_data['embeddings'])):
             key = f"0_0_{pdbc}_{emb_data['resids'][i]}"
             test_embed_dict[key] = emb_data['embeddings'][i].astype('float')
     
-    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings_cath.pkl')
+    serialize(test_embed_dict, f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_test_embeddings_2.pkl')
     
