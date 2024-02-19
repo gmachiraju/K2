@@ -61,11 +61,11 @@ Prospectors' dependecies are very light, only requiring the following popular/ma
 - `pickle`
 - `dill`
 
-This work was originally implemented in Python 3.10. 
+This work was originally implemented in Python 3.10. Given light dependencies, we anticipate fairly seemless support for future Python versions. 
 
 
 ## Future development
 We plan to make a more official repo release in the coming weeks and months. At this time, our priority is to get this software into the hands of researchers applying feature attribution to large data with large models. Looking forward, we anticipate the following quality of life improvements:
 
-- [] Updated OOP nomenclature — ideally standardized with our arXiv preprint
-- [] Pytorch support for individual layer fitting (e.g. torch-enabled k-means as a quantizer)
+- [ ] Updated OOP nomenclature — ideally standardized with our arXiv preprint
+- [ ] Pytorch support for individual layer fitting (e.g. torch-enabled k-means as a quantizer)
