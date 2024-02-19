@@ -112,6 +112,10 @@ class K2Processor():
             # for k in embed_dict.keys():
             #     id_list.append(k)
             mapping_dict = {} # dummy
+        elif self.embeddings_type == "multidict":
+            embed_dict = utils.deserialize(self.embeddings_path)
+            id_list = list(embed_dict.keys())
+            mapping_dict = utils.deserialize(self.mapping_path)
         elif self.embeddings_type == "memmap":
             embed_dict = np.memmap(self.embeddings_path, dtype='float32', mode='r', shape=(self.sample_size,1024)) # not an actual dict as you can see
             mapping_dict = utils.deserialize(self.mapping_path)
@@ -133,8 +137,11 @@ class K2Processor():
         # create df and partition by marker
         if self.datatype == 'histo':
             ms = self.get_plot_markers()
+        elif self.datatype == "text":
+            ms = self.get_text_labels()
         elif self.datatype == 'protein':
             ms = self.get_graph_labels()
+        
         ms_dict = dict(zip(self.id_list, ms))
         embed_df = pd.DataFrame.from_dict(ms_dict, orient='index', columns=["marker"])
         o_df = embed_df.loc[embed_df['marker'] == "o"] # 0-class
@@ -158,9 +165,38 @@ class K2Processor():
             print("collapsing from dim", array.shape[1], "--> 2")
         return array # (num_embeds, embed_dim)
 
+    def get_text_labels(self):
+        """
+        For use with text data. 
+        Returns:
+            ms: list of markers
+        """
+        sal_counter = 0
+        so_dict = self.so_dict_path
+        if so_dict is not {}:
+            so_dict = utils.deserialize(so_dict) 
+        mapping_dict = self.mapping_dict # ID to doc label
+
+        ms = []
+        for id_val in self.id_list:
+            doc_id = int(id_val.split("_")[0])
+            doc_lab = int(mapping_dict[doc_id] > 0) # converting counts of target to 0,1
+            el = int(so_dict[id_val])
+            if (doc_lab == 1) and (el == 1):
+                m = "X"
+                sal_counter += 1
+            elif (doc_lab == 1) and (el == 0):
+                m = "x"
+            elif (doc_lab == 0) and (el == 0):
+                m = "o"
+            # print(doc_lab, el)
+            ms.append(m)
+        print("sampled", str(sal_counter), "known salient objects!")
+        return ms
+
     def get_plot_markers(self):
         """
-        Gives us a way to visualize different chunks
+        Gives us a way to visualize different chunks -- only used for histopath
         """
         sal_counter = 0
         so_dict = self.so_dict_path
@@ -215,7 +251,7 @@ class K2Processor():
     def partition_by_marker(self, mark_df):
         embeds_list_mark = []
         for k in list(mark_df.index):
-            if self.embeddings_type == "dict":
+            if self.embeddings_type in ["dict", "multidict"]:
                 v = self.embed_dict[k]
             elif self.embeddings_type == "memmap":
                 pos = self.mapping_dict[k]
@@ -372,7 +408,11 @@ class K2Model():
             if self.train_label_dict is None:
                 y.append(G.graph['label'])
             else:
-                y.append(self.train_label_dict[G_file])
+                if self.modality == "text":
+                    G_id = int(G_file.split("_")[1])
+                    y.append(self.train_label_dict[G_id])
+                else:
+                    y.append(self.train_label_dict[G_file])
 
             # quantize and embed sprite
             sprite = self.construct_sprite(G)

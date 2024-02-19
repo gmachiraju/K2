@@ -111,6 +111,13 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
         G = deserialize(os.path.join(model_args["train_graph_path"], G_name))
         if model_args["modality"] == "graph":
             Y = set_graph_emb(G, 'gt')
+        elif model_args["modality"] == "text":
+            if arm == "train":
+                gt_name = "_".join(G_name.split("_")[0:2]) + "_gt.obj"
+                Y = deserialize(os.path.join(gt_dir, gt_name)) # groud truth
+            elif arm == "test":
+                gt_name = "_".join(G_name.split("_")[0:2]) + "_gt.obj"
+                Y = deserialize(os.path.join(gt_dir, gt_name)) # groud truth
         else:
             if arm == "train":
                 Y = deserialize(os.path.join(gt_dir, G_name + "_gt")) # groud truth
@@ -126,17 +133,33 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
             thresholds[idx_adaptive + 1] = ("<", threshold_a) # adaptive backward
 
         # get label
-        if model.train_label_dict and arm == "train": # loaded a dict
-            y = model.train_label_dict[G_name]
-        elif model.train_label_dict and arm == "test": # loaded a dict
-            y = model_args["train_label_dict"][G_name]
-        else: # internally stored in graph
-            y = G.graph["label"]
+        if model_args["modality"] == "text":
+            if model.train_label_dict and arm == "train": 
+                id_num = int(G_name.split("_")[1])
+                y = model.train_label_dict[id_num]
+            elif model.train_label_dict and arm == "test": # loaded a dict
+                id_num = int(G_name.split("_")[1])
+                y = model_args["train_label_dict"][id_num]
+        else:
+            if model.train_label_dict and arm == "train": # loaded a dict
+                y = model.train_label_dict[G_name]
+            elif model.train_label_dict and arm == "test": # loaded a dict
+                y = model_args["train_label_dict"][G_name]
+            else: # internally stored in graph
+                y = G.graph["label"]
+         
+        lab_list = list(nx.get_node_attributes(Y, "emb").values())
+        num_sal = np.sum(lab_list)
+        num_tokens = len(lab_list)
+        # print(y, num_sal, num_tokens)
+        if num_sal == num_tokens:
+            print("skipping class-1 example with all salient")
+            continue
         
         ## JUST FOR TRACKING GRAPHS WITH NO POSITIVES -- REMOVE LATER
-        if (y == 1) and (linearize_graph(Y).sum() == 0):
-            print('skipping ' + G.graph["id"] + ': no positive residues')
-            continue
+        # if (y == 1) and (linearize_graph(Y).sum() == 0):
+        #     print('skipping ' + G.graph["id"] + ': no positive residues')
+        #     continue
         
         if model.variant == "predictive":
             sprite = model.construct_sprite(G)
@@ -150,6 +173,8 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
         data_results_dict["thresh_msd"] = dicts[0]
         data_results_dict["thresh_cm"] = dicts[1]
         data_results_dict["cont"] = dicts[2]
+        # if y == 1:
+        #     pdb.set_trace()
         data_results_dict["pred"] = dicts[3]
         datum_linearized_dict = dicts[4]
         
@@ -173,6 +198,7 @@ def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", l
     else:
         thresholds = [thresh]
     
+    skip_msd = False
     model_results_dict = {} # returned object
     data_linearized_dict = {} # for IID eval
     for t, P_name in enumerate(os.listdir(P_path)):
@@ -180,6 +206,10 @@ def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", l
         P = deserialize(os.path.join(P_path, P_name))
         if modality == "graph":
             pdb.set_trace()
+        elif modality == "text":
+            # skip_msd = True
+            new_name = "_".join(P_name.split("_")[0:2]) + "_gt.obj"
+            Y = deserialize(os.path.join(Y_path, new_name)) # groud truth
         else:
             Y = deserialize(os.path.join(Y_path, P_name + "-graph")) # groud truth
         
@@ -191,13 +221,25 @@ def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", l
         # get label
         if modality == "graph": # not implemented
             pdb.set_trace()
+        elif modality == "text":
+            idx = int(P_name.split("_")[1])
+            y = label_dict[idx]
         else:
             y = label_dict[P_name]
         y_hat = np.nan
 
+        # skip certain docs
+        lab_list = list(nx.get_node_attributes(Y, "emb").values())
+        num_sal = np.sum(lab_list)
+        num_tokens = len(lab_list)
+        # print(y, num_sal, num_tokens)
+        if num_sal == num_tokens:
+            print("skipping class-1 example with all salient")
+            continue
+
         # pdb.set_trace()
-        dicts = eval_suite(P_name, P, Y, y, y_hat, thresholds)
-        data_results_dict["thresh_msd"] = dicts[0]
+        dicts = eval_suite(P_name, P, Y, y, y_hat, thresholds, skip_msd=skip_msd)
+        data_results_dict["thresh_msd"] = dicts[0]    
         data_results_dict["thresh_cm"] = dicts[1]
         data_results_dict["cont"] = dicts[2]
         data_results_dict["pred"] = dicts[3]
@@ -212,7 +254,7 @@ def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", l
     return model_results_dict, data_linearized_dict
 
 
-def eval_suite(G_name, P, Y, y, y_hat, thresholds):
+def eval_suite(G_name, P, Y, y, y_hat, thresholds, skip_msd=False):
     """
     Calls on metrics to evaluate a single graph datum
     Can use for any [0,1] heatmap: K2 prospect map, saliency, attention, probability
@@ -245,6 +287,8 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds):
     datum_pred = (y_hat, y_hat_map)
     # _dict[(G_name, y)]
 
+    # pdb.set_trace()
+
     # multi-thresholding eval
     #------------------------
     datum_thresh_msd_dict, datum_thresh_cm_dict = {}, {}
@@ -254,7 +298,8 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds):
         else:
             cond, t = None, copy(thresh)
         P_bin = binarize_graph(P_scaled, t, conditional=cond) # binarize with threshold
-        datum_thresh_msd_dict[thresh] = msd(P_bin)
+        if skip_msd == False:
+            datum_thresh_msd_dict[thresh] = msd(P_bin)
         P_bin_vec = linearize_graph(P_bin) # linearize
         datum_thresh_cm_dict[thresh] = confusion(P_bin_vec, Y_vec)
 
@@ -391,7 +436,7 @@ def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cac
     SHOULD JUST CALL GRIDSEARCH_ITERATION
     """
     # get model params from model_str
-    if modality == "image":
+    if modality in ["image", "text"]:
         k,r,alpha,tau,lam = extract_params(model_str)
         hparams = {"alpha": alpha, "tau": tau, "lambda": lam}
         processor = deserialize_model(os.path.join(processor_cache_dir, "k%d.processor" % k))
@@ -490,14 +535,17 @@ def num_cc(G):
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return len(size_cc)
 
-def compute_test_ccs(gts_path):
+def compute_test_ccs(gts_path, modality="image"):
     """
     num ccs
     """
     mcss = {}
     for gt_file in os.listdir(gts_path):
-        gt_id = gt_file.split("-")[0:2]
-        gt_id = '-'.join(gt_id)
+        if modality == "image":
+            gt_id = gt_file.split("-")[0:2]
+            gt_id = '-'.join(gt_id)
+        elif modality == "text":
+            gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
         mcss[gt_id] = num_cc(gt)
@@ -509,14 +557,17 @@ def mean_cc_size(G):
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return np.sum(size_cc) / len(size_cc) # prevalence / num CC
 
-def compute_test_mcs(gts_path):
+def compute_test_mcs(gts_path, modality="image"):
     """
     mean component size
     """
     mcss = {}
     for gt_file in os.listdir(gts_path):
-        gt_id = gt_file.split("-")[0:2]
-        gt_id = '-'.join(gt_id)
+        if modality == "image":
+            gt_id = gt_file.split("-")[0:2]
+            gt_id = '-'.join(gt_id)
+        elif modality == "text":
+            gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
         mcss[gt_id] = mean_cc_size(gt)
@@ -528,11 +579,14 @@ def mean_region_dispersion(G):
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return len(size_cc) / np.mean(size_cc) # num ccs / mean size
 
-def compute_test_mrds(gts_path):
+def compute_test_mrds(gts_path, modality="image"):
     mrds = {}
     for gt_file in os.listdir(gts_path):
-        gt_id = gt_file.split("-")[0:2]
-        gt_id = '-'.join(gt_id)
+        if modality == "image":
+            gt_id = gt_file.split("-")[0:2]
+            gt_id = '-'.join(gt_id)
+        elif modality == "text":
+            gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
         mrds[gt_id] = mean_region_dispersion(gt)
@@ -542,11 +596,14 @@ def region_prevalence(G):
     mask_vals = list(nx.get_node_attributes(G, "emb").values())
     return np.sum(mask_vals) / len(mask_vals)
     
-def compute_test_rps(gts_path):
+def compute_test_rps(gts_path, modality="image"):
     rps = {}
     for gt_file in os.listdir(gts_path):
-        gt_id = gt_file.split("-")[0:2]
-        gt_id = '-'.join(gt_id)
+        if modality == "image":
+            gt_id = gt_file.split("-")[0:2]
+            gt_id = '-'.join(gt_id)
+        elif modality == "text":
+            gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
         rps[gt_id] = region_prevalence(gt)

@@ -38,6 +38,24 @@ def deserialize_model(path):
     with open(path, 'rb') as fh:
         return dill.load(fh)
     
+# sentence things
+def process_sent(s):
+    s = s.strip() # left and right stripping
+    if s == "":                    # Don't change empty strings.
+        return s
+    if s[-1] in ["?", ".", "!"]:   # Don't change if already okay.
+        return s
+    return s + "."  
+
+def process_sentences(sents):
+    ret = []
+    for s in sents:
+        s = process_sent(s)
+        if s != "":
+            ret.append(s)
+    return ret
+    
+
 #================================================================
 # useful transformations
 #----------------------------------------------------------------
@@ -189,6 +207,19 @@ def convert_arr2graph(Z):
     G.graph.update({'pos_dict': lin2grid_map})
     return G
 
+def convert_text2graph_gt(gt, G):
+    """
+    gt: ground truth array
+    G: map graph
+    """
+    G_gt = G.copy()
+    for node in G_gt.nodes():
+        # print("hi")
+        # i = G_gt.nodes[node]['pos']
+        G_gt.nodes[node]['emb'] = int(gt[node])
+    # pdb.set_trace()
+    return G_gt
+
 def convert_text2graph(Z):
     """
     Convert embedded text (Array of embeddings) to map graph
@@ -313,9 +344,8 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
         spread_pos_dict = G.graph["pos_dict"]
         for k in spread_pos_dict.keys():
             spread_pos_dict[k] = (spread_pos_dict[k][1] * eps, -spread_pos_dict[k][0] * eps)
-
         pos = nx.spring_layout(G, pos=spread_pos_dict, fixed=spread_pos_dict.keys(), k=10, iterations=100)
-    elif modality == "graph":
+    elif modality in ["graph", "text"]:
         pos = nx.kamada_kawai_layout(G)
     
     if prospect_flag:
