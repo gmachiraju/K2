@@ -41,11 +41,11 @@ random.seed(SEED)
 def create_splits(database, metal):
     db = database[metal]
     db_pos, db_neg = db['pos'], db['neg']
-    
-    num_pos_ec = db_pos['EC_NUMBER'].unique()
-    train_ec, test_ec = train_test_split(num_pos_ec, test_size=0.2, random_state=SEED)
-    train_df = db_pos[db_pos['EC_NUMBER'].isin(train_ec)]
-    test_df = db_pos[db_pos['EC_NUMBER'].isin(test_ec)]
+
+    num_pos_pdb = db_pos['pdb_chain'].unique()
+    train_pdb, test_pdb = train_test_split(num_pos_pdb, test_size=0.2, random_state=SEED)
+    train_df = db_pos[db_pos['pdb_chain'].isin(train_pdb)]
+    test_df = db_pos[db_pos['pdb_chain'].isin(test_pdb)]
     train_keyres = dict(train_df.groupby('pdb_chain')['interactions'].apply(lambda x: [i for i in sum(x, []) if i.split('_')[0] in atom_info.aa]))
     test_keyres = dict(test_df.groupby('pdb_chain')['interactions'].apply(lambda x: [i for i in sum(x, []) if i.split('_')[0] in atom_info.aa]))
     
@@ -130,8 +130,8 @@ def dict2graph(emb_data, labels=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='../data/metal_database_balanced_2.pkl')
-    parser.add_argument('--pdb_dir', type=str, default='/scratch/users/aderry/pdb')
-    parser.add_argument('--metal', type=str, default='CA')
+    parser.add_argument('--pdb_dir', type=str, default='../../pdb/localpdb/mirror/pdb')
+    parser.add_argument('--metal', type=str, default='ZN')
     parser.add_argument('--encoder', type=str, default='COLLAPSE')
     parser.add_argument('--nn_radius', type=float, default=8.0)
     args = parser.parse_args()
@@ -150,6 +150,10 @@ if __name__ == '__main__':
     
     database = deserialize(args.dataset)
     train_keyres, test_keyres, train_neg, test_neg = create_splits(database, args.metal)
+    print(set(list(train_keyres.keys())).intersection(set(list(test_keyres.keys()))))
+    print(set(list(train_keyres.keys())).intersection(set(test_neg)))
+    print(set(train_neg).intersection(set(test_neg)))
+    print(set(train_neg).intersection(set(list(test_keyres.keys()))))
     
     train_embed_dict = {}
     train_graph_dir = f'../data/{args.encoder}_{args.metal}_{args.nn_radius}_train_graphs_2'
@@ -207,6 +211,8 @@ if __name__ == '__main__':
         
         G = dict2graph(emb_data, labels)
         G.graph.update({'id': pdbc, 'label': 1})
+        if f'{pdbc}.pkl' in train_graph_dir:
+            print(pdbc)
         serialize(G, os.path.join(test_graph_dir, f'{pdbc}.pkl'))
 
         for i in range(len(emb_data['embeddings'])):
@@ -220,6 +226,8 @@ if __name__ == '__main__':
         
         G = dict2graph(emb_data)
         G.graph.update({'id': pdbc, 'label': 0})
+        if f'{pdbc}.pkl' in train_graph_dir:
+            print(pdbc)
         serialize(G, os.path.join(test_graph_dir, f'{pdbc}.pkl'))
         
         for i in range(len(emb_data['embeddings'])):

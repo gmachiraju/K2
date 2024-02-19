@@ -28,14 +28,15 @@ if modality == "graph":
     #     {'COLLAPSE': ('COLLAPSE-ZN-8.0-0.0005', 0.7), \
     #     'ESM': ('ESM-ZN-8.0-0.0005', 0.4), \
     #     'AA': ('AA-ZN-8.0-0.0005', 0.6)}
-    encoder_top_models = \
-        {'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.95), \
-        'ESM': ('k30_r1_cutoff4.00_alpha0.500_tau1.00_lamnan.model', 0.0), \
-        'AA': ('k21_r1_cutoff8.00_alpha0.100_tau1.00_lamnan.model', 0.5)}
+    encoder_top_models = { \
+    'COLLAPSE': ('k15_r1_cutoff8.00_alpha0.500_tau4.00_lamnan.model', 0.9), \
+    # 'COLLAPSE': ('k20_r0_cutoff4.00_alpha0.001_tau0.00_lamnan.model', 0.95), \
+    'ESM': ('k30_r1_cutoff4.00_alpha0.500_tau1.00_lamnan.model', 0.0), \
+    'AA': ('k21_r2_cutoff6.00_alphanan_taunan_lam1.00.model', 0.5)}
     baseline_top_models = \
-        {'COLLAPSE': ('COLLAPSE-ZN-8.0-0.0005', 0.7), \
-        'ESM': ('ESM-ZN-8.0-0.0005', 0.4), \
-        'AA': ('AA-ZN-8.0-0.0005', 0.6)}
+    {'COLLAPSE': ('COLLAPSE-ZN-8.0-0.0005', 0.7), \
+    'ESM': ('ESM-ZN-8.0-0.0005', 0.4), \
+    'AA': ('AA-ZN-8.0-0.0005', 0.6)}
     
 elif modality == "image":
     encoder_list = ["tile2vec", "ViT", "CLIP", "PLIP"]
@@ -94,7 +95,7 @@ if modality == "graph":
         else:
             g_encoder = encoder
 
-        G_dir = f"../data/{g_encoder}_{metal}_{cutoff}_test_graphs"
+        G_dir = f"../data/{g_encoder}_{metal}_{cutoff}_test_graphs_2"
         df = test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, G_dir, gt_dir=None, label_dict=None, modality="graph")
         test_df.append(df)
     test_df = pd.concat(test_df)

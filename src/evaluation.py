@@ -37,15 +37,15 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
     print("...and have %d models trained so far!" % len(os.listdir(model_cache_dir)))
     print("="*40)
 
-    if "metal" in process_args.keys():
-        metal = process_args["metal"]
+    if "dataset" in process_args.keys():
+        dataset = process_args["dataset"]
     
     for cutoff in sweep_dict.get("cutoff", [np.nan]):
         if not np.isnan(cutoff):
             if encoder_name == 'AA':
                 encoder_name = 'COLLAPSE'
-            process_args["embeddings_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_embeddings_2.pkl"
-            model_args["train_graph_path"] = f"../data/{encoder_name}_{metal}_{cutoff}_train_graphs_2"
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_embeddings.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_graphs"
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
             # if process_args["embeddings_type"] == "memmap" and process_args["datatype"] == "histo":
@@ -264,10 +264,6 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds, skip_msd=False):
     # Continuous & IID eval
     #----------------------
     P_vec = linearize_graph(P_scaled)
-    if y == 1:
-        # print(G_name)
-        # print(P_vec)
-        pass
     Y_vec = linearize_graph(Y)
     datum_linearized = (P_vec, Y_vec) # store for IID eval
     # _dict[(G_name, y)]
@@ -357,9 +353,9 @@ def fetch_model(proc, r, model_cache_dir, model_args, cutoff=np.nan, alpha=np.na
     """
     k = proc.k
     if not np.isnan(cutoff):
-        model_name = "k%d_r%d_cutoff%.2f_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
+        model_name = "k%d_r%d_cutoff%.2f_alpha%.4f_tau%.2f_lam%.2f.model" % (k, r, cutoff, alpha, tau, lam)
     else:   
-        model_name = "k%d_r%d_alpha%.3f_tau%.2f_lam%.2f.model" % (k, r, alpha, tau, lam)
+        model_name = "k%d_r%d_alpha%.4f_tau%.2f_lam%.2f.model" % (k, r, alpha, tau, lam)
 
     if model_name in os.listdir(model_cache_dir):
         print("Found fitted model for " + model_name)
@@ -529,15 +525,15 @@ def get_label(datum_results_dict):
 
 # Properties of embed/regions
 #==============================
-def num_cc(G):
+def num_cc(G, gt_key='emb'):
     G_drop = G.copy()
-    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n][gt_key] == 0])
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return len(size_cc)
 
-def compute_test_ccs(gts_path, modality="image"):
+def compute_test_ccs(gts_path, modality="image", gt_key='emb'):
     """
-    num ccs
+    number of connected components (ccs)
     """
     mcss = {}
     for gt_file in os.listdir(gts_path):
@@ -548,16 +544,16 @@ def compute_test_ccs(gts_path, modality="image"):
             gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        mcss[gt_id] = num_cc(gt)
+        mcss[gt_id] = num_cc(gt, gt_key)
     return mcss
 
-def mean_cc_size(G):
+def mean_cc_size(G, gt_key='emb'):
     G_drop = G.copy()
-    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n][gt_key] == 0])
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return np.sum(size_cc) / len(size_cc) # prevalence / num CC
 
-def compute_test_mcs(gts_path, modality="image"):
+def compute_test_mcs(gts_path, modality="image", gt_key='emb'):
     """
     mean component size
     """
@@ -570,16 +566,16 @@ def compute_test_mcs(gts_path, modality="image"):
             gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        mcss[gt_id] = mean_cc_size(gt)
+        mcss[gt_id] = mean_cc_size(gt, gt_key)
     return mcss    
 
-def mean_region_dispersion(G):
+def mean_region_dispersion(G, gt_key='emb'):
     G_drop = G.copy()
-    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n]["emb"] == 0])
+    G_drop.remove_nodes_from([n for n in G_drop.nodes if G_drop.nodes[n][gt_key] == 0])
     size_cc = [len(c) for c in nx.connected_components(G_drop)]
     return len(size_cc) / np.mean(size_cc) # num ccs / mean size
 
-def compute_test_mrds(gts_path, modality="image"):
+def compute_test_mrds(gts_path, modality="image", gt_key='emb'):
     mrds = {}
     for gt_file in os.listdir(gts_path):
         if modality == "image":
@@ -589,14 +585,14 @@ def compute_test_mrds(gts_path, modality="image"):
             gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        mrds[gt_id] = mean_region_dispersion(gt)
+        mrds[gt_id] = mean_region_dispersion(gt, gt_key)
     return mrds
 
-def region_prevalence(G):
-    mask_vals = list(nx.get_node_attributes(G, "emb").values())
+def region_prevalence(G, gt_key='emb'):
+    mask_vals = list(nx.get_node_attributes(G, gt_key).values())
     return np.sum(mask_vals) / len(mask_vals)
     
-def compute_test_rps(gts_path, modality="image"):
+def compute_test_rps(gts_path, modality="image", gt_key='emb'):
     rps = {}
     for gt_file in os.listdir(gts_path):
         if modality == "image":
@@ -606,39 +602,8 @@ def compute_test_rps(gts_path, modality="image"):
             gt_id = '_'.join(gt_file.split("_")[0:2]) + "_graph.obj"
         gt_path = os.path.join(gts_path, gt_file)
         gt = deserialize(gt_path)
-        rps[gt_id] = region_prevalence(gt)
+        rps[gt_id] = region_prevalence(gt, gt_key)
     return rps
-
-# def compute_seg_per_config(encoder_alias, model_str, threshold, cache_dir, Gs_dir, gts_dir, label_dict_path):
-#     """
-#     Takes top model per encoder and compares segmentation auprc per test example
-#     """
-#     cache_dir = cache_dir + encoder_alias + "_gridsearch/"
-#     Gs_dir = Gs_dir + encoder_alias
-#     gts_dir = gts_dir + encoder_alias
-#     label_dict = utils.deserialize(label_dict_path + encoder_alias + ".obj")
-
-#     results_cache_dir = cache_dir + encoder_alias + "-eval_results"
-#     model_cache_dir = cache_dir + encoder_alias + "-fitted_k2_models"
-#     processor_cache_dir = cache_dir + encoder_alias + "-fitted_k2_processors"
-#     linearized_cache_dir = cache_dir + encoder_alias + "-linearized_data"
-#     test_metrics = ["auprc"]
-
-#     df = test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, Gs_dir, gt_dir=gts_dir, label_dict=label_dict, modality="image", arm="test")
-#     return df
-
-# def compute_seg_all_configs(encoder_top_models, cache_dir, Gs_dir, gts_dir, label_dict_path):
-#     test_df = []
-#     for encoder, (model_str, threshold) in encoder_top_models.items():
-#         print(encoder)
-#         if encoder == "ViT":
-#             encoder_alias = "vit_iid"
-#         else:
-#             encoder_alias = encoder.lower()
-#         df = compute_seg_per_config(encoder_alias, model_str, threshold, cache_dir, Gs_dir, gts_dir, label_dict_path)
-#         test_df.append(df)
-#     test_df = pd.concat(test_df)
-#     return test_df
 
 
 #========================BASH SCRIPTING========================
