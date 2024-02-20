@@ -2,9 +2,9 @@
 ![Prospector_pipeline](assets/prospect.png "Prospector head")
 
 ## Important links:  
-- [arxiv](coming soon!)
-- [xeets](coming soon!)   
-- [blog](coming soon!)
+- [arxiv](https://arxiv.org/abs/2402.11729)
+- [xeets](https://x.com/gmachiraju/status/1759984360185573846?s=20)   
+- [blog] (coming soon!)
 
 ## Introduction
 Welcome to the Prospector Heads repo! Here, we share our implementation of prospector heads (aka "prospectors"). This repo is nicknamed "K2" for readability and legacy purposes, and references a key operator in prospector module called \***k2conv**\* (see our arXiv paper above!). As a work in progress, this repo will continue to get weekly updates (see bottom of this readme).  
@@ -31,11 +31,11 @@ The IPython notebooks herein also give examples on how to visualize:
 
 ## Repo roadmap
 We present IPython notebooks for each experimented modality. The following naming convention is used for notebooks:
-- Any notebook beginning with "Doc" outlines experiments for sentence retrieval in text documents (sequences)
-- Any notebook beginning with "Histo" outlines experiments for tumor localization in histopathology slides (images)
-- Any notebook beginning with "Protein" outlines experiments for binding site identification in protein strucutures (graphs)
+- Any notebook beginning with `Doc` outlines experiments for sentence retrieval in text documents (sequences)
+- Any notebook beginning with `Histo` outlines experiments for tumor localization in histopathology slides (images)
+- Any notebook beginning with `Protein` outlines experiments for binding site identification in protein strucutures (graphs)
 
-Python files contain all architectures and helper functions used in the notebooks. Here we briefly summarize each file (*bolding* any modality-specific files):
+Python files contain all architectures and helper functions used in the notebooks. Here we briefly summarize each file (*italics* denote any modality-specific files):
 - `architectures.py`: encoder architectures used for *pathology/imagery*
 - `attention-baselines.py`: attention-based heads used as baselines for *proteins/graphs*
 - `eval-baselines.py`: evaluation of baselines for *proteins/graphs*
