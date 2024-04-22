@@ -12,9 +12,13 @@ import utils
 from utils import serialize, deserialize, serialize_model, deserialize_model
 from utils import compute_adaptive_thresh_graph, compute_adaptive_thresh_vec
 from utils import binarize_graph, binarize_vec, rescale_graph, rescale_vec, linearize_graph, set_graph_emb, AAQuantizer
+from utils import flatten_graph_embs
 from k2 import K2Processor, K2Model
 from metrics import confusion, msd, auroc, auprc, ap
 import metrics
+
+from time import process_time 
+from time import perf_counter
 
 def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, model_args):
     """
@@ -87,7 +91,7 @@ def gridsearch_iteration_wrapper(model, model_str, model_args, gt_dir, results_c
 
 # Helper functions
 #=================
-def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
+def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train", speed_test=False):
     """
     This function can be used as a part of a grid search or for a single model/threshold (testing)
     Inputs:
@@ -102,6 +106,11 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
     else:
         thresholds = [thresh]
     
+    # adding for speed benchmarks
+    #-----------------------------
+    dt_cpu_data, dt_wall_data = [], []
+    #-----------------------------
+
     model_results_dict = {} # returned object
     data_linearized_dict = {} # for IID eval
     G_files = os.listdir(model_args["train_graph_path"])
@@ -126,7 +135,25 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
 
         if model.processor.quantizer_type == "AA":
             G = set_graph_emb(G, 'resid')
-        P = model.prospect(G)
+
+        # adding for speed benchmarks
+        #-----------------------------
+        if speed_test == False:
+             P = model.prospect(G)
+        else:
+            start_cpu_datum = process_time()
+            start_wall_datum = perf_counter()
+            P = model.prospect(G)
+            stop_cpu_datum = process_time()  
+            stop_wall_datum = perf_counter() 
+            tdd_cpu = float(stop_cpu_datum - start_cpu_datum) # datum
+            tdd_wall = float(stop_wall_datum - start_wall_datum) # datum
+            print("dt cpu -> datum:", tdd_cpu)
+            print("dt wall -> datum:", tdd_wall)
+            dt_cpu_data.append(tdd_cpu)
+            dt_wall_data.append(tdd_wall)
+        #-----------------------------
+
         if thresh == "all":
             threshold_a = compute_adaptive_thresh_graph(P)
             thresholds[idx_adaptive] = (">", threshold_a) # adaptive forward
@@ -184,7 +211,10 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train"):
         # pbar.set_description('processed: %d' % (1 + t))
         # pbar.update(1)
 
-    return model_results_dict, data_linearized_dict
+    if speed_test == True:
+        return model_results_dict, data_linearized_dict, dt_cpu_data, dt_wall_data
+    else:
+        return model_results_dict, data_linearized_dict
 
 
 def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", label_dict=None):
@@ -238,6 +268,10 @@ def eval_baseline_explanations(P_path, Y_path, thresh="all", modality="image", l
             continue
 
         # pdb.set_trace()
+        # added to flatten if needed
+        if modality in ["text", "image"] and isinstance(P.nodes[0]["emb"], np.ndarray):
+            P = flatten_graph_embs(P)
+
         dicts = eval_suite(P_name, P, Y, y, y_hat, thresholds, skip_msd=skip_msd)
         data_results_dict["thresh_msd"] = dicts[0]    
         data_results_dict["thresh_cm"] = dicts[1]
@@ -268,6 +302,7 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds, skip_msd=False):
     datum_linearized = (P_vec, Y_vec) # store for IID eval
     # _dict[(G_name, y)]
 
+    # pdb.set_trace()
     # Continuous eval can only run on class-1 data
     datum_cont = {"auroc": np.nan, "auprc": np.nan, "ap": np.nan}
     if y == 1:
@@ -426,7 +461,7 @@ def few_hot_classification(P_probs, few=10):
 
  # Test eval
  # ===========   
-def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image", arm="train"):
+def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cache_dir, G_dir, gt_dir, label_dict=None, modality="image", arm="train", speed_test=False):
     """
     Test-set evaluation using top models extracted from training grid search
     SHOULD JUST CALL GRIDSEARCH_ITERATION
@@ -457,9 +492,14 @@ def test_eval(model_str, threshold, test_metrics, model_cache_dir, processor_cac
                   "hparams": hparams,
                   "train_graph_path": G_dir,
                   "train_label_dict": label_dict}
-    
-    model_results_dict, _ = gridsearch_iteration(model, model_args, gt_dir, thresh=threshold, arm=arm)    
-    return get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics)
+    if speed_test == False:
+        model_results_dict, _ = gridsearch_iteration(model, model_args, gt_dir, thresh=threshold, arm=arm, speed_test=speed_test)    
+        return get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics)
+    else:
+        model_results_dict, _, cpu, wall = gridsearch_iteration(model, model_args, gt_dir, thresh=threshold, arm=arm, speed_test=speed_test)    
+        return get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics), cpu, wall
+
+
 
 def get_test_metrics(model_results_dict, encoder, model_str, threshold, test_metrics):
     # evaluate using test_metrics

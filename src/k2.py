@@ -1,6 +1,9 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm, colors
+import seaborn as sns
+
 from sklearn.cluster import KMeans
 import networkx as nx
 import pandas as pd
@@ -17,6 +20,12 @@ EPS = 1e-10 # numerical stability
 CMAP="tab20"
 custom_cmap = plt.get_cmap(CMAP)
 custom_cmap.set_bad(color='white')
+
+# deals with more than 20 colors
+CMAP2 = "Pastel2"
+joint_cmap = colors.ListedColormap(cm.tab20.colors + cm.Pastel2.colors, name='tab40')
+joint_cmap.set_bad(color='white')
+
 
 class K2Processor():
     """
@@ -315,9 +324,9 @@ class K2Processor():
                 ax1.set_ylabel("tSNE-1")
                 ax1.set_title("t-SNE with K="+str(self.k)+" clusters (perplexity="+str(perplexity)+")")
                 
-                ax1.scatter(tsne[:len(embedded_o),0], tsne[:len(embedded_o),1], c=labels_o, alpha=0.3, s=5, marker="o", cmap="Dark2")
-                ax1.scatter(tsne[len(embedded_o):len(embedded_o)+len(embedded_x),0], tsne[len(embedded_o):len(embedded_o)+len(embedded_x),1], c=labels_x, alpha=0.3, s=30, marker="x", cmap="Dark2")
-                ax1.scatter(tsne[len(embedded_o)+len(embedded_x):,0], tsne[len(embedded_o)+len(embedded_x):,1], c=labels_X, alpha=0.6, s=300, edgecolors="k", marker="X", cmap="Dark2") 
+                ax1.scatter(tsne[:len(embedded_o),0], tsne[:len(embedded_o),1], c=labels_o, alpha=0.3, s=5, marker="o", cmap=joint_cmap) # used to be Dark2
+                ax1.scatter(tsne[len(embedded_o):len(embedded_o)+len(embedded_x),0], tsne[len(embedded_o):len(embedded_o)+len(embedded_x),1], c=labels_x, alpha=0.3, s=30, marker="x", cmap=joint_cmap)
+                ax1.scatter(tsne[len(embedded_o)+len(embedded_x):,0], tsne[len(embedded_o)+len(embedded_x):,1], c=labels_X, alpha=0.6, s=300, edgecolors="k", marker="X", cmap=joint_cmap) 
                 
         unique, counts = np.unique(cluster_labs, return_counts=True)
         if self.verbosity == "full":
@@ -646,7 +655,7 @@ class K2Model():
         vec = np.array([vec[key] for key in self.hash_keys])
         return vec
 
-    def visualize_motif_graph(self, G=None, labels=False):
+    def visualize_motif_graph(self, G=None, labels=False, style="graph"):
         """
         Inputs:
             G: networkx map graph
@@ -665,8 +674,16 @@ class K2Model():
             logged = lambda x: np.log10(x)
             print("Displaying motif graph with log10 scaling")
 
+        if style == "graph":
+            self.plot_graph_view(G, logged, labels, model_flag)
+        elif style == "matrix":
+            self.plot_matrix_view(G, logged, labels, model_flag)
+
+
+    def plot_graph_view(self, G, logged, labels, model_flag):
         pos = nx.circular_layout(G)
         colors = [node for node in list(G.nodes())]
+        # print(colors)
         plt.figure()
 
         n_weights = nx.get_node_attributes(G, 'n_weight').values()
@@ -675,8 +692,15 @@ class K2Model():
             ns = int(np.max([1, nw]))
             # ns = int(np.min([ns, 10])) # cap thickness to 10
             n_size.append(logged(ns))
-        nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=colors, cmap=CMAP, edgecolors='black')
-        if labels:
+        
+        # old command isn't explicit about color:
+        # nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=colors, cmap=joint_cmap, edgecolors='black') #cmap used to be CMAP
+        
+        # new command is explicit with color order
+        k = len(list(G.nodes))
+        color_assignments = list(joint_cmap(range(k))) 
+        nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=color_assignments, edgecolors='black') #cmap used to be CMAP
+        if labels or (k > 20):
             nx.draw_networkx_labels(G, pos)
 
         e_weights = list(nx.get_edge_attributes(G, 'e_weight').values())
@@ -694,8 +718,81 @@ class K2Model():
         if model_flag == False:
             e_colors = ["black" for el in e_colors] # keep bacl lines for datum motif graph
         nx.draw_networkx_edges(G, pos=pos, width=e_thickness, alpha=0.5, edge_color=e_colors)
+        plt.axis('off')
         plt.draw()
-    
+
+    def plot_matrix_view(self, G, logged, labels, model_flag):
+        """
+        adapted from:
+        - https://stackoverflow.com/questions/65810567/aligning-subplots-with-a-pyplot-barplot-and-seaborn-heatmap
+        - https://stackoverflow.com/questions/33379261/how-can-i-have-a-bar-next-to-python-seaborn-heatmap-which-shows-the-summation-of 
+        - https://stackoverflow.com/questions/40489821/how-to-write-text-above-the-bars-on-a-bar-plot-python
+        """
+        k = len(list(G.nodes))
+        M = np.zeros((k,k))
+        for i in range(k):
+            for j in range(k):
+                M[i,j] = G[i][j]["e_weight"]
+        bars = pd.Series(list(nx.get_node_attributes(G, 'n_weight').values()))
+        # print(bars)
+
+        fig = plt.figure(figsize=(20,20))
+        ax1 = plt.subplot2grid((20,20), (1,0), colspan=19, rowspan=19)
+        ax2 = plt.subplot2grid((20,20), (0,0), colspan=19, rowspan=1)
+        ax3 = plt.subplot2grid((20,20), (1,19), colspan=1, rowspan=19)
+
+        mask = np.zeros_like(M)
+        mask[np.tril_indices_from(mask,k=-1)] = True
+        if model_flag == True:
+            sns.heatmap(M, ax=ax1, annot=False, cmap="bwr", mask=mask, linecolor='b', cbar = False)
+        else:
+            sns.heatmap(M, ax=ax1, annot=False, cmap="binary", mask=mask, linecolor='b', cbar = False)
+        ax1.xaxis.tick_bottom()
+        
+        # print(list(joint_cmap(range(k))))
+        # pdb.set_trace()
+        # sns.barplot(bars.transpose(), ax=ax2, palette=list(joint_cmap(range(k))))
+        # sns.barplot(bars,             ax=ax3, palette=list(joint_cmap(range(k))))
+
+        x_tick_pos = [i for i in range(k)]
+        signs = np.sign(bars)
+        
+        bar_top = ax2.bar(x=x_tick_pos, height=np.abs(bars), color=list(joint_cmap(range(k))), align="center")
+        for i,rect in enumerate(bar_top):
+            h = rect.get_height()
+            if h > 0:
+                if signs[i] > 0 and model_flag == True:
+                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="red", ha='center', va='bottom')
+                elif signs[0] < 0 and model_flag == True:
+                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="blue", ha='center', va='bottom')
+                else:
+                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="black", ha='center', va='bottom')
+
+        ax2.set_xticks(list(range(k)))
+        ax2.set_xlim(x_tick_pos[0] - 0.5, x_tick_pos[-1] + 0.5)
+        ax2.spines[['right', 'top']].set_visible(False)
+
+        bar_right = ax3.barh(y=x_tick_pos, width=np.abs(bars), color=list(joint_cmap(range(k))), align="center")
+        for i,rect in enumerate(bar_right):
+            w = rect.get_width()
+            h = rect.get_height()
+            x,y = rect.get_x(), rect.get_y()
+            if w > 0:
+                if signs[i] > 0 and model_flag == True:
+                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="red", ha='left', va='center')
+                elif signs[i] < 0 and model_flag == True:
+                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="blue", ha='left', va='center')
+                else:
+                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="black", ha='left', va='center')
+
+
+        ax3.set_yticks(list(range(k)))
+        ax3.set_ylim(x_tick_pos[0] - 0.5, x_tick_pos[-1] + 0.5)
+        ax3.invert_yaxis()
+        ax3.spines[['right', 'top']].set_visible(False)
+
+        plt.tight_layout()
+
     def sort_keys(self, key_list):
         """
         Helper function to take a list of keys (either single nodes or edges) and sort. 

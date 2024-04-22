@@ -3,11 +3,17 @@ import networkx as nx
 import pickle
 import dill
 import matplotlib.pyplot as plt
+from matplotlib import cm, colors
 import os
 import pdb
 CMAP="tab20"
 custom_cmap = plt.get_cmap(CMAP)
 custom_cmap.set_bad(color='white')
+
+# deals with more than 20 colors
+CMAP2 = "Pastel2"
+joint_cmap = colors.ListedColormap(cm.tab20.colors + cm.Pastel2.colors, name='tab40')
+joint_cmap.set_bad(color='white')
 
 #================================================================
 # General functions for saving/loading data
@@ -92,6 +98,21 @@ def expand_positive_nodes(G):
             for nhbr in G.neighbors(node):
                 G_expanded.nodes[nhbr]['gt'] = 1
     return G_expanded
+
+def flatten_graph_embs(G):
+    """
+    Flatten/squeeze graph embeddings.
+    Inputs: 
+        G: Graph with vector-valued node attributes
+    Outputs:
+        R: flattened version of G
+    """
+    R = G.copy()
+    for node in G.nodes:
+        e = G.nodes[node]['emb']
+        flat_e = e[0][0]
+        R.nodes[node]['emb'] = flat_e
+    return R
 
 def rescale_graph(G):
     """
@@ -327,7 +348,7 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
     if type(colors[0]) != int:
         raise Exception("Error: Sprite detected as multi-channel when it should be single-channel and categorical. Please quantize the Datum's Map Graph.")
 
-    our_cmap = custom_cmap
+    our_cmap = joint_cmap # custom_cmap
     if prospect_flag:
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(G)
@@ -359,24 +380,40 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
     plt.draw()
 
 def convert_graph2arr(S):
-    h,w = S.graph["array_size"]
-    d = S.graph["d"]
-    A = np.zeros((h,w,d)) 
-    A[:] = np.nan
+    try:
+        h,w = S.graph["array_size"]
+        d = S.graph["d"]
+        A = np.zeros((h,w,d)) 
+        A[:] = np.nan
+        for node in S.nodes():
+            i,j = S.nodes[node]['pos']
+            A[i,j,:] = S.nodes[node]['emb']
+    except TypeError:
+        w = len(S.nodes())
+        h = 1
+        d = S.graph["d"]
+        A = np.zeros((h,w,d)) 
+        A[:] = np.nan
+        for node in S.nodes():
+            A[:,node,:] = S.nodes[node]['emb']
 
-    for node in S.nodes():
-        i,j = S.nodes[node]['pos']
-        A[i,j,:] = S.nodes[node]['emb']
     return A
 
 def convert_GTgraph2arr(S):
-    h,w = S.graph["array_size"]
-    d = 1
-    A = np.zeros((h,w,d)) 
-
-    for node in S.nodes():
-        i,j = S.nodes[node]['pos']
-        A[i,j,:] = S.nodes[node]['emb']
+    try:
+        h,w = S.graph["array_size"]
+        d = 1
+        A = np.zeros((h,w,d)) 
+        for node in S.nodes():
+            i,j = S.nodes[node]['pos']
+            A[i,j,:] = S.nodes[node]['emb']
+    except TypeError:
+        w = len(S.nodes())
+        h = 1
+        d = 1
+        A = np.zeros((h,w,d)) 
+        for node in S.nodes():
+            A[:,node,:] = S.nodes[node]['emb']
     return A
 
 #==========================================
@@ -434,9 +471,14 @@ def visualize_quantizedZ(Z_viz, prospect_flag=False):
     plt.show()
 
 def visualize_GTmap(arr, sprite_arr):
-    maxmag = get_prospect_range(arr)
-    basemap = np.where(sprite_arr > 0, -maxmag/8, 0) # light bluw
-    new_map = np.where(arr > 0, maxmag, basemap)
+    if arr.shape[0] == 1:
+        maxmag = get_prospect_range(arr)
+        basemap = np.where(sprite_arr >= 0, -maxmag/8, 0) # light blue
+        new_map = np.where(arr > 0, maxmag, basemap)
+    else:
+        maxmag = get_prospect_range(arr)
+        basemap = np.where(sprite_arr >= 0, -maxmag/8, 0) # light blue
+        new_map = np.where(arr > 0, maxmag, basemap)
 
     plt.figure(figsize=(18, 12), dpi=100)
     plt.yticks([])
