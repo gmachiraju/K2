@@ -2,6 +2,9 @@ import numpy as np
 import networkx as nx
 import pickle
 import dill
+
+from skimage.filters import threshold_otsu
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 import os
@@ -132,6 +135,14 @@ def rescale_graph(G):
     for idx, node in enumerate(R.nodes):
         R.nodes[node]['emb'] = rescaled_vals[idx]
     return R
+
+def binarize_graph_otsu(G):
+    # automatic binarization
+    G = rescale_graph(G)
+    G_vec = linearize_graph(G)
+    thresh = threshold_otsu(G_vec)    
+    B = binarize_graph(G, thresh)
+    return B
 
 def binarize_graph(G, thresh, conditional=None):
     """
@@ -299,7 +310,7 @@ def convert_arr2graph_GfromGT(G_gt, arr):
             G.nodes[node]['emb'] = 0 # class-0: ground truth is all zeros
     return G
 
-def construct_sprite(G, processor):
+def construct_sprite(G, processor, key_in="emb", key_out="emb"):
     """
     Takes a Map Graph G and constructs a sprite from it by applying an embedding quantizer
     AKA: "embedding quantization" for sprite construction
@@ -307,12 +318,12 @@ def construct_sprite(G, processor):
     S = G.copy()
     S.graph.update({'d': 1})
     for node in S.nodes:
-        embedding = S.nodes[node]['emb']
+        embedding = S.nodes[node][key_in]
         if isinstance(embedding, np.ndarray):
             motif_label = processor.quantizer.predict(embedding.reshape(1, -1).astype(float))[0]
         else: # if not using FM embedding (e.g. amino acid baseline)
             motif_label = processor.quantizer.predict(embedding)
-        S.nodes[node]['emb'] = motif_label
+        S.nodes[node][key_out] = motif_label
     return S
 
 def get_prospect_range(P):
@@ -378,6 +389,53 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
         nx.draw(G, pos=pos, edge_color="gray", node_size=15, node_shape=shape, node_color=colors, cmap=our_cmap)
     plt.axis('off')
     plt.draw()
+    
+    
+def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=False):
+    """Plot dot-line graph for the cellular graph
+    Adapted from SPACE_GM codebase
+    Args:
+        G (nx.Graph): full cellular graph of the region
+        node_colors (list): list of node colors. Defaults to None.
+    """
+    # Extract basic node attributes
+    node_coords = [G.nodes[n]['center_coord'] for n in G.nodes]
+    node_coords = np.stack(node_coords, 0)
+    plt.figure()
+    
+    if prospect_flag == True:
+        node_colors = [matplotlib.cm.get_cmap("bwr")([G.nodes[n][key]]) for n in G.nodes]
+    else:
+        if node_colors is None:
+            unique_cell_types = sorted(set([G.nodes[n][key] for n in G.nodes]))
+            cell_type_to_color = {ct: matplotlib.cm.get_cmap("tab20")(i % 20) for i, ct in enumerate(unique_cell_types)}
+            node_colors = [cell_type_to_color[G.nodes[n][key]] for n in G.nodes]
+            
+    assert len(node_colors) == node_coords.shape[0]
+    for (i, j, edge_type) in G.edges.data():
+        xi, yi = G.nodes[i]['center_coord']
+        xj, yj = G.nodes[j]['center_coord']
+        if edge_type['edge_type'] == 'neighbor':
+            plotting_kwargs = {"c": "k",
+                               "linewidth": 1,
+                               "linestyle": '-'}
+        else:
+            plotting_kwargs = {"c": (0.4, 0.4, 0.4, 1.0),
+                               "linewidth": 0.3,
+                               "linestyle": '--'}
+        plt.plot([xi, xj], [yi, yj], zorder=1, **plotting_kwargs)
+
+    plt.scatter(node_coords[:, 0],
+                node_coords[:, 1],
+                s=10,
+                c=node_colors,
+                linewidths=0.3,
+                zorder=2)
+    plt.xlim(0, node_coords[:, 0].max() * 1.01)
+    plt.ylim(0, node_coords[:, 1].max() * 1.01)
+    plt.axis('off')
+    return
+
 
 def convert_graph2arr(S):
     try:

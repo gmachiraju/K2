@@ -50,6 +50,7 @@ class K2Processor():
         self.dataset_path = args.dataset_path
         self.verbosity = args.verbosity
         self.so_dict_path = args.so_dict_path
+        self.marker_flag = args.marker_flag if "marker_flag" in args.keys() else None
 
         if self.embeddings_path is None:
             print("No embeddings path provided, sampling from dataset")
@@ -103,7 +104,7 @@ class K2Processor():
         """
         if self.quantizer_type == "kmeans":
             print("Chosen KMeans model for quantization...")
-            model = KMeans(n_clusters=self.k, random_state=0, n_init=10) # 10 is default
+            model = KMeans(n_clusters=self.k, random_state=0, n_init=10) # n_init = 10 is default
         else:
             raise NotImplementedError
         
@@ -122,13 +123,23 @@ class K2Processor():
             #     id_list.append(k)
             mapping_dict = {} # dummy
         elif self.embeddings_type == "multidict":
+            # mapping dict is a dict of labels
             embed_dict = utils.deserialize(self.embeddings_path)
             id_list = list(embed_dict.keys())
-            mapping_dict = utils.deserialize(self.mapping_path)
+            if type(self.mapping_path) == list:
+                mapping_dict = [utils.deserialize(mp) for mp in self.mapping_path] 
+            else:
+                mapping_dict = utils.deserialize(self.mapping_path)
         elif self.embeddings_type == "memmap":
             embed_dict = np.memmap(self.embeddings_path, dtype='float32', mode='r', shape=(self.sample_size,1024)) # not an actual dict as you can see
-            mapping_dict = utils.deserialize(self.mapping_path)
+            if type(self.mapping_path) == list:
+                mapping_dict = [utils.deserialize(mp) for mp in self.mapping_path] 
+            else:
+                mapping_dict = utils.deserialize(self.mapping_path)
             id_list = mapping_dict.keys()
+        else:
+            print("Error: embeddings type not recognized.")
+            exit()
 
         self.embed_dict = embed_dict
         self.mapping_dict = mapping_dict
@@ -150,29 +161,97 @@ class K2Processor():
             ms = self.get_text_labels()
         elif self.datatype == 'protein':
             ms = self.get_graph_labels()
+        elif self.datatype == "cells":
+            if type(self.marker_flag) == list:
+                ms1 = self.get_cell_labels()
+                ms2 = self.get_cell_types()
+                ms = (ms1, ms2)
+            else:
+                if self.marker_flag == "labels" or self.marker_flag is None:
+                    ms = self.get_cell_labels()
+                elif self.marker_flag == "types":
+                    ms = self.get_cell_types()
+                else:
+                    print("Error: marker flag not recognized.")
+                    exit()
         
-        ms_dict = dict(zip(self.id_list, ms))
+        # check for GTs
+        gt_flag = False
+        if "X" in ms:
+           gt_flag = True 
+        
+        if type(ms) == tuple:
+            ms_dict = zip(self.id_list, ms[0], ms[1])
+            ms_dict = dict((x,(y,z)) for x,y,z in ms_dict)
+            print("Error: dual markers not implemented yet...")
+            raise NotImplementedError
+        else:
+            ms_dict = dict(zip(self.id_list, ms))
+            
         embed_df = pd.DataFrame.from_dict(ms_dict, orient='index', columns=["marker"])
         o_df = embed_df.loc[embed_df['marker'] == "o"] # 0-class
         x_df = embed_df.loc[embed_df['marker'] == "x"] # 1-class, non-salient
-        X_df = embed_df.loc[embed_df['marker'] == "X"] # 1-class, salient
+        if gt_flag:
+            X_df = embed_df.loc[embed_df['marker'] == "X"] # 1-class, salient
 
         # separate arrays and indices
         array_o, self.idx_o = self.partition_by_marker(o_df) # idx_o is end index of 0 class
         array_x, self.idx_x = self.partition_by_marker(x_df)
-        array_X, self.idx_X = self.partition_by_marker(X_df)
+        if gt_flag:
+            array_X, self.idx_X = self.partition_by_marker(X_df)
 
         # update indices of arrays
         self.idx_x += self.idx_o # end index of x class
-        self.idx_X += self.idx_x # end index of X class 
+        if gt_flag:
+            self.idx_X += self.idx_x # end index of X class 
 
         # concatenate arrays
-        arrays = [array_o, array_x, array_X]
+        if gt_flag:
+            arrays = [array_o, array_x, array_X]
+        else:
+            arrays = [array_o, array_x]
+            self.idx_X = None
+            
         array = np.vstack(arrays).astype("double")
         if self.verbosity == "full":
             print("total embeds:", array.shape[0])
             print("collapsing from dim", array.shape[1], "--> 2")
         return array # (num_embeds, embed_dim)
+
+
+    def get_cell_labels(self):
+        if type(self.mapping_dict) == list:
+            idx = self.marker_flag.index("labels")
+            mapping_dict = self.mapping_dict[idx]
+        else:
+            mapping_dict = self.mapping_dict
+            
+        ms = []
+        for id_val in self.id_list:
+            data_id = int(id_val.split("_")[0])        
+            data_lab = int(mapping_dict[data_id])
+            if (data_lab == 1):
+                m = "x"
+            elif (data_lab == 0):
+                m = "o"
+            ms.append(m)
+        return ms
+    
+    def get_cell_types(self):
+        # instead of cell labels (labels of origin biopsies), we can also use cell types
+        if type(self.mapping_dict) == list:
+            idx = self.marker_flag.index("types")
+            mapping_dict = self.mapping_dict[idx]
+        else:
+            mapping_dict = self.mapping_dict
+            
+        ms = []
+        options = ["*", "x", "o", "^", "s", "+", "d", "p"]
+        for id_val in self.id_list:
+            cell_lab = int(mapping_dict[id_val])
+            m = options[cell_lab]
+            ms.append(m)
+        return ms
 
     def get_text_labels(self):
         """
@@ -269,6 +348,10 @@ class K2Processor():
         array_mark = np.vstack(embeds_list_mark)
         idx_mark = len(embeds_list_mark)
         return array_mark, idx_mark
+    
+    # def load_quantizer(self, quantizer):
+    #     # if want to overwrite quantizer for modified viz
+    #     self.quantizer = quantizer
         
     def visualize_quantizer(self, subsample=None):
         """visualize quantizer labels (clusters) in tSNE reduced-dim space
@@ -283,17 +366,22 @@ class K2Processor():
         if subsample:
             if self.verbosity == "full":
                 print(f'subsampling elements to {subsample*100} %')
+            
             embedded_o, labels_o, embedded_x, labels_x, embedded_X, labels_X = self.split_embeddings()
             print(f'num o: {int(embedded_o.shape[0] * subsample)}, num x: {int(embedded_x.shape[0] * subsample)}, num X: {int(embedded_X.shape[0] * subsample)}')
+            
             sample_o = np.random.choice(embedded_o.shape[0], int(embedded_o.shape[0] * subsample), replace=False)
             embedded_o = embedded_o[sample_o,:]
             labels_o = labels_o[sample_o]
+            
             sample_x = np.random.choice(embedded_x.shape[0], int(embedded_x.shape[0] * subsample), replace=False)
             embedded_x = embedded_x[sample_x,:]
             labels_x = labels_x[sample_x]
+            
             sample_X = np.random.choice(embedded_X.shape[0], int(embedded_X.shape[0] * subsample), replace=False)
             embedded_X = embedded_X[sample_X,:]
             labels_X = labels_X[sample_X]
+            
             embedding_array = np.vstack([embedded_o, embedded_x, embedded_X])
             cluster_labs = np.hstack([labels_o, labels_x, labels_X])
         else:
@@ -301,21 +389,24 @@ class K2Processor():
             cluster_labs = self.quantizer.labels_.copy()
 
         # tsne - color by source
-        for perplexity in [5,10,20]:
-            tsne = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=perplexity).fit_transform(embedding_array)
+        for perplexity in [20]: #[5,10,20]:
+            tsne = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=perplexity, random_state=0).fit_transform(embedding_array)
             if not subsample:
                 embedded_o = tsne[0:self.idx_o,:]
                 embedded_x = tsne[self.idx_o:self.idx_x,:]
-                if self.idx_X == 0:
-                    embedded_X = tsne[self.idx_x:,:]
-                else:
-                    embedded_X = tsne[self.idx_x:self.idx_X,:]
                 labels_o = cluster_labs[0:self.idx_o]
                 labels_x = cluster_labs[self.idx_o:self.idx_x]
-                if self.idx_X == 0:
-                    labels_X = cluster_labs[self.idx_x:]
-                else:
-                    labels_X = cluster_labs[self.idx_x:self.idx_X]
+                markers = [0] * len(labels_o) + [1] * len(labels_x)
+                if self.idx_X: # have GTs
+                    if self.idx_X == 0:
+                        embedded_X = tsne[self.idx_x:,:]
+                    else:
+                        embedded_X = tsne[self.idx_x:self.idx_X,:]
+                    if self.idx_X == 0:
+                        labels_X = cluster_labs[self.idx_x:]
+                    else:
+                        labels_X = cluster_labs[self.idx_x:self.idx_X]
+                    markers = [0] * len(labels_o) + [1] * len(labels_x) + [2] * len(labels_X) # overwrite
             
             if self.verbosity == "full":
                 fig, ax1 = plt.subplots(1, 1)
@@ -324,15 +415,62 @@ class K2Processor():
                 ax1.set_ylabel("tSNE-1")
                 ax1.set_title("t-SNE with K="+str(self.k)+" clusters (perplexity="+str(perplexity)+")")
                 
-                ax1.scatter(tsne[:len(embedded_o),0], tsne[:len(embedded_o),1], c=labels_o, alpha=0.3, s=5, marker="o", cmap=joint_cmap) # used to be Dark2
-                ax1.scatter(tsne[len(embedded_o):len(embedded_o)+len(embedded_x),0], tsne[len(embedded_o):len(embedded_o)+len(embedded_x),1], c=labels_x, alpha=0.3, s=30, marker="x", cmap=joint_cmap)
-                ax1.scatter(tsne[len(embedded_o)+len(embedded_x):,0], tsne[len(embedded_o)+len(embedded_x):,1], c=labels_X, alpha=0.6, s=300, edgecolors="k", marker="X", cmap=joint_cmap) 
+                if self.marker_flag == "types":
+                    labo = "Cell type 1"
+                    labx = "Cell type 2"
+                    labX = "Cell type 3"
+                elif self.marker_flag == "labels":
+                    labo = "Class-0 origin"
+                    labx = "Class-1 origin"
+                    labX = "Class-1 salient"
                 
-        unique, counts = np.unique(cluster_labs, return_counts=True)
+                ax1.scatter(tsne[:len(embedded_o),0], tsne[:len(embedded_o),1], c=labels_o, alpha=0.3, s=5, marker="o", cmap=joint_cmap, label=labo) # used to be Dark2
+                ax1.scatter(tsne[len(embedded_o):len(embedded_o)+len(embedded_x),0], tsne[len(embedded_o):len(embedded_o)+len(embedded_x),1], c=labels_x, alpha=0.3, s=30, marker="x", cmap=joint_cmap, label=labx)
+                if self.idx_X: # have GTs
+                    ax1.scatter(tsne[len(embedded_o)+len(embedded_x):,0], tsne[len(embedded_o)+len(embedded_x):,1], c=labels_X, alpha=0.6, s=300, edgecolors="k", marker="X", cmap=joint_cmap, label=labX) 
+                plt.legend()
+                
         if self.verbosity == "full":
+            unique, counts = np.unique(cluster_labs, return_counts=True)
+            # plt.figure()
+            # plt.title("Cluster bar chart")
+            # plt.bar(unique, height=counts)
+            # plt.show()
+            unique_markers = set(np.unique(markers))
+        
+            # stacked bar
+            zipped = list(zip(cluster_labs, markers))
+            all_counts = []
+            for u in unique:
+                entries = [el[1] for el in zipped if el[0] == u]
+                markers = set(np.unique(entries))
+                
+                if len(markers) == 1:
+                    missing = unique_markers.difference(markers)
+                    entries.append(missing.pop()) # padding
+                    
+                _, counts = np.unique(entries, return_counts=True)
+                all_counts.append(list(counts))
+                            
             plt.figure()
-            plt.title("Cluster bar chart")
-            plt.bar(unique, height=counts)
+            if self.marker_flag == "types":
+                labels_legend = ['Cell type 1', 'Cell type 2']
+                plt.title("Cluster bar chart by cell type")
+            elif self.marker_flag == "labels":
+                labels_legend = ['Class-0 origin', 'Class-1 origin']
+                plt.title("Cluster bar chart by cell label origin")
+            else:
+                plt.title("Cluster bar chart")
+                
+            all_counts = list(zip(*all_counts))
+            counts1, counts2 = all_counts[0], all_counts[1]
+            plt.bar(unique, height=counts1, color='k')
+            plt.bar(unique, height=counts2, bottom=counts1, color='lightgray')
+            plt.xticks(unique)
+            plt.legend(labels=labels_legend)
+            plt.show()
+        
+        
 
     def instantiate_motif_graph(self):
         """
@@ -347,6 +485,9 @@ class K2Processor():
             Kk.edges[edge]['e_weight'] = 0.0
         return Kk
     
+
+
+
 
 class K2Model():
     """
@@ -419,6 +560,9 @@ class K2Model():
             else:
                 if self.modality == "text":
                     G_id = int(G_file.split("_")[1])
+                    y.append(self.train_label_dict[G_id])
+                elif self.modality == "cells":
+                    G_id = int(G_file.split("S")[1].split(".")[0])
                     y.append(self.train_label_dict[G_id])
                 else:
                     y.append(self.train_label_dict[G_file])
@@ -517,7 +661,8 @@ class K2Model():
         log2fc = np.log2((mu1 + EPS)/(mu0 + EPS))
         # print(np.min(log2fc), np.max(log2fc))
         # print(np.round(log2fc, 2))
-        print(np.where(np.abs(log2fc) > tau))
+        # toggle to debug:
+        # print(np.where(np.abs(log2fc) > tau))
 
         # compute p-values between classes
         pvals = []
@@ -531,7 +676,8 @@ class K2Model():
         
         # print(np.max(pvals), np.min(pvals))
         # print(np.round(pvals, 4))
-        print(np.where(np.array(pvals) < alpha))
+        # toggle to debug:
+        # print(np.where(np.array(pvals) < alpha))
         
         # building a mask to "regularize"/squash features to zero
         sig_mask = []
@@ -551,6 +697,7 @@ class K2Model():
         Performs prospection: nonlinear convolution with fitted B
         Inputs:
             G: networkx map graph 
+        TODO: add key_in, key_out?
         """
         # construct sprite via quantization
         S = self.construct_sprite(G)
@@ -816,7 +963,10 @@ class K2Model():
         Inputs:
             P: prospect graph
         """
-        utils.visualize_sprite(P, self.modality, prospect_flag=True, labels=labels)
+        if self.modality == "cells":
+            utils.visualize_cell_graph(P, key="emb", prospect_flag=True)
+        else:
+            utils.visualize_sprite(P, self.modality, prospect_flag=True, labels=labels)
     
     def visualize_prospect_map(self, P):
         prospect_map = utils.convert_graph2arr(P)
@@ -831,5 +981,8 @@ class K2Model():
         return G
 
     def visualize_sprite(self, G):
-        utils.visualize_sprite(G, self.modality)
+        if self.modality == "cells":
+            utils.visualize_cell_graph(G, key="concept")
+        else:
+            utils.visualize_sprite(G, self.modality)
 

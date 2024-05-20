@@ -73,7 +73,6 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
                 for alpha in sweep_dict["alpha"]:
                     for tau in sweep_dict["tau"]:
                         print("Gridsearch: currently on hypothesis test with k=%d, r=%d, cutoff%f, alpha=%f, tau=%f" % (k, r, cutoff, alpha, tau))   
-                        
                         model, model_str = fetch_model(proc, r, model_cache_dir, model_args, cutoff=cutoff, alpha=alpha, tau=tau)
                         if model_str in results_dict.keys():
                             continue # already trained and stored
