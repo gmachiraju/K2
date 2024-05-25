@@ -344,7 +344,7 @@ def get_prospect_range(P):
     maxmag = np.max([np.abs(minP), np.abs(maxP)])
     return maxmag
 
-def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, checking_flag=False, labels=False):
+def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, checking_flag=False, labels=False, color_assign=None):
     # Visualize sprite
     plt.figure()
     colors = list(nx.get_node_attributes(G, 'emb').values())
@@ -360,6 +360,13 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
         raise Exception("Error: Sprite detected as multi-channel when it should be single-channel and categorical. Please quantize the Datum's Map Graph.")
 
     our_cmap = joint_cmap # custom_cmap
+    
+    print(color_assign)
+    if color_assign is not None:
+        print("yupppp")
+        our_cmap = matplotlib.colors.ListedColormap(color_assign, name='from_list')
+        colors = [our_cmap([G.nodes[n]["emb"]]) for n in G.nodes]
+
     if prospect_flag:
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(G)
@@ -513,7 +520,7 @@ def visualize_Z(Z_path, crop_dict, kmeans_model, mode="dict"):
     Z_viz = quantize_Z(Z, kmeans_model, mode=mode)  
     visualize_quantizedZ(Z_viz)    
 
-def visualize_quantizedZ(Z_viz, prospect_flag=False):
+def visualize_quantizedZ(Z_viz, prospect_flag=False, colors=None):
     plt.figure(figsize=(18, 12), dpi=100)
     plt.yticks([])
     plt.xticks([])
@@ -524,7 +531,8 @@ def visualize_quantizedZ(Z_viz, prospect_flag=False):
         plt.imshow(Z_viz, cmap=plt.get_cmap("bwr"), vmin=-maxmag, vmax=maxmag)
         plt.colorbar() 
     else:
-        plt.imshow(Z_viz, cmap=custom_cmap)
+        cmap = matplotlib.colors.ListedColormap(colors, name='from_list')
+        plt.imshow(Z_viz, cmap=cmap)
         plt.colorbar() 
     plt.show()
 

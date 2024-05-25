@@ -846,7 +846,9 @@ class K2Model():
         # new command is explicit with color order
         k = len(list(G.nodes))
         color_assignments = list(joint_cmap(range(k))) 
+        print(color_assignments)
         nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=color_assignments, edgecolors='black') #cmap used to be CMAP
+        
         if labels or (k > 20):
             nx.draw_networkx_labels(G, pos)
 
@@ -867,6 +869,7 @@ class K2Model():
         nx.draw_networkx_edges(G, pos=pos, width=e_thickness, alpha=0.5, edge_color=e_colors)
         plt.axis('off')
         plt.draw()
+        self.color_assignments = color_assignments
 
     def plot_matrix_view(self, G, logged, labels, model_flag):
         """
@@ -891,9 +894,9 @@ class K2Model():
         mask = np.zeros_like(M)
         mask[np.tril_indices_from(mask,k=-1)] = True
         if model_flag == True:
-            sns.heatmap(M, ax=ax1, annot=False, cmap="bwr", mask=mask, linecolor='b', cbar = False)
+            sns.heatmap(M, ax=ax1, annot=False, linewidths=0.5, cmap="bwr", mask=mask, linecolor='lightgray', cbar = False)
         else:
-            sns.heatmap(M, ax=ax1, annot=False, cmap="binary", mask=mask, linecolor='b', cbar = False)
+            sns.heatmap(M, ax=ax1, annot=False, linewidths=0.5, cmap="binary", mask=mask, linecolor='lightgray', cbar = False)
         ax1.xaxis.tick_bottom()
         
         # print(list(joint_cmap(range(k))))
@@ -903,17 +906,18 @@ class K2Model():
 
         x_tick_pos = [i for i in range(k)]
         signs = np.sign(bars)
+        s=25
         
         bar_top = ax2.bar(x=x_tick_pos, height=np.abs(bars), color=list(joint_cmap(range(k))), align="center")
         for i,rect in enumerate(bar_top):
             h = rect.get_height()
             if h > 0:
                 if signs[i] > 0 and model_flag == True:
-                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="red", ha='center', va='bottom')
+                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="red", ha='center', va='bottom', size=s)
                 elif signs[0] < 0 and model_flag == True:
-                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="blue", ha='center', va='bottom')
+                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="blue", ha='center', va='bottom', size=s)
                 else:
-                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="black", ha='center', va='bottom')
+                    ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="black", ha='center', va='bottom', size=s)
 
         ax2.set_xticks(list(range(k)))
         ax2.set_xlim(x_tick_pos[0] - 0.5, x_tick_pos[-1] + 0.5)
@@ -926,19 +930,24 @@ class K2Model():
             x,y = rect.get_x(), rect.get_y()
             if w > 0:
                 if signs[i] > 0 and model_flag == True:
-                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="red", ha='left', va='center')
+                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="red", ha='left', va='center', size=s)
                 elif signs[i] < 0 and model_flag == True:
-                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="blue", ha='left', va='center')
+                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="blue", ha='left', va='center', size=s)
                 else:
-                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="black", ha='left', va='center')
-
+                    ax3.text(x+w, y+h/2, f'{signs[i] * w:.2f}', color="black", ha='left', va='center', size=s)
 
         ax3.set_yticks(list(range(k)))
         ax3.set_ylim(x_tick_pos[0] - 0.5, x_tick_pos[-1] + 0.5)
         ax3.invert_yaxis()
         ax3.spines[['right', 'top']].set_visible(False)
 
+        # black borders
+        ax1.axhline(y=0, color='k',linewidth=10)
+        ax1.axhline(y=M.shape[1], color='k',linewidth=10)
+        ax1.axvline(x=0, color='k',linewidth=10)
+        ax1.axvline(x=M.shape[0], color='k',linewidth=10)
         plt.tight_layout()
+        plt.show()
 
     def sort_keys(self, key_list):
         """
@@ -984,5 +993,5 @@ class K2Model():
         if self.modality == "cells":
             utils.visualize_cell_graph(G, key="concept")
         else:
-            utils.visualize_sprite(G, self.modality)
+            utils.visualize_sprite(G, modality=self.modality, color_assign=self.color_assignment)
 
