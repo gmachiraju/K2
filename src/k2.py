@@ -894,7 +894,7 @@ class K2Model():
         mask = np.zeros_like(M)
         mask[np.tril_indices_from(mask,k=-1)] = True
         if model_flag == True:
-            sns.heatmap(M, ax=ax1, annot=False, linewidths=0.5, cmap="bwr", mask=mask, linecolor='lightgray', cbar = False)
+            sns.heatmap(M, ax=ax1, annot=False, linewidths=0.5, cmap="bwr", mask=mask, linecolor='lightgray', cbar = False, center=0)
         else:
             sns.heatmap(M, ax=ax1, annot=False, linewidths=0.5, cmap="binary", mask=mask, linecolor='lightgray', cbar = False)
         ax1.xaxis.tick_bottom()
