@@ -558,7 +558,7 @@ def visualize_GTmap(arr, sprite_arr):
 # utility functions for visualizing proteins
 #===========================================
 
-def load_structure(pdbc, pdb_dir='/scratch/users/aderry/pdb'):
+def load_structure(pdbc, pdb_dir='../../pdb/localpdb/mirror/pdb'):
     from collapse import process_pdb
     from atom3d.util.formats import df_to_bp
     
