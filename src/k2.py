@@ -834,7 +834,7 @@ class K2Model():
         # new command is explicit with color order
         k = len(list(G.nodes))
         color_assignments = list(joint_cmap(range(k))) 
-        print(color_assignments)
+        # print(color_assignments)
         nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=color_assignments, edgecolors='black') #cmap used to be CMAP
         
         if labels or (k > 20):
@@ -886,7 +886,10 @@ class K2Model():
 
         x_tick_pos = [i for i in range(k)]
         signs = np.sign(bars)
-        s=25
+        if k < 20:
+            s=25
+        else:
+            s=15
         
         bar_top = ax2.bar(x=x_tick_pos, height=np.abs(bars), color=list(joint_cmap(range(k))), align="center")
         for i,rect in enumerate(bar_top):
