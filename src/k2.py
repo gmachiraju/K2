@@ -548,6 +548,7 @@ class K2Model():
         """
         X,y = [],[]
         G_files = os.listdir(self.train_graph_path)
+
         # with tqdm(total=len(G_files), desc="Creating K2 training array...") as pbar:
         for t, G_file in enumerate(G_files):
             # load map graph data
@@ -670,14 +671,6 @@ class K2Model():
         for idx in range(p):
             _, pval = scipy.stats.mannwhitneyu(X1[:,idx], X0[:,idx])
             pvals.append(pval * p) # bonferroni correction
-        # print(np.max(pvals), np.min(pvals))
-        # print(np.max(np.array(pvals)*p), np.min(np.array(pvals)*p))
-        # pvals = scipy.stats.false_discovery_control(pvals, method='bh')
-        
-        # print(np.max(pvals), np.min(pvals))
-        # print(np.round(pvals, 4))
-        # toggle to debug:
-        # print(np.where(np.array(pvals) < alpha))
         
         # building a mask to "regularize"/squash features to zero
         sig_mask = []
@@ -706,16 +699,12 @@ class K2Model():
         for node in P.nodes:
             P.nodes[node]['emb'] = 0.0
         
-        # for n in self.w_hgraph.nodes:
-        #     print(n, self.w_hgraph.nodes[n]['n_weight'])
-        # for e in self.w_hgraph.edges:
-        #     print(e, self.w_hgraph.edges[e]['e_weight'])
-            
         # nonlinear convolve with hashmap
         for node in S.nodes:
             # load node presence in weighted graph
             node_motif = S.nodes[node]['emb']
             P.nodes[node]['emb'] += self.w_hgraph.nodes[node_motif]["n_weight"]
+
 
             if self.r > 0:
                 # load in edge presence in weighted graph (skipgrams)
@@ -723,10 +712,9 @@ class K2Model():
                 neighbors = list(subgraph.nodes())
                 nhbr_motifs = [S.nodes[n]['emb'] for n in neighbors]
                 unique, counts = np.unique(nhbr_motifs, return_counts=True) 
-                # print(node_motif, self.w_hgraph.nodes[node_motif]["n_weight"])
+
                 for idx, u in enumerate(unique):
                     P.nodes[node]['emb'] += (self.w_hgraph.edges[(node_motif,u)]["e_weight"] * counts[idx])
-                    # print((node_motif,u), self.w_hgraph.edges[(node_motif,u)]["e_weight"])
         
         # return prospect map P w/ class-differential nodes
         return P
@@ -846,7 +834,7 @@ class K2Model():
         # new command is explicit with color order
         k = len(list(G.nodes))
         color_assignments = list(joint_cmap(range(k))) 
-        print(color_assignments)
+        # print(color_assignments)
         nx.draw_networkx_nodes(G, pos=pos, linewidths=n_size, node_color=color_assignments, edgecolors='black') #cmap used to be CMAP
         
         if labels or (k > 20):
@@ -860,9 +848,6 @@ class K2Model():
 
         e_thickness = []
         for ew in e_weights:
-            # et = int(np.max([1, ew]))
-            # et = int(np.min([et, 10])) # cap thickness to 10
-            # e_thickness.append(logged(et))
             e_thickness.append(ew / max_wt)
         if model_flag == False:
             e_colors = ["black" for el in e_colors] # keep bacl lines for datum motif graph
@@ -899,15 +884,13 @@ class K2Model():
         else:
             sns.heatmap(M, ax=ax1, annot=False, linewidths=0.5, cmap="binary", mask=mask, linecolor='lightgray', cbar = False)
         ax1.xaxis.tick_bottom()
-        
-        # print(list(joint_cmap(range(k))))
-        # pdb.set_trace()
-        # sns.barplot(bars.transpose(), ax=ax2, palette=list(joint_cmap(range(k))))
-        # sns.barplot(bars,             ax=ax3, palette=list(joint_cmap(range(k))))
 
         x_tick_pos = [i for i in range(k)]
         signs = np.sign(bars)
-        s=25
+        if k < 20:
+            s=25
+        else:
+            s=15
         
         bar_top = ax2.bar(x=x_tick_pos, height=np.abs(bars), color=list(joint_cmap(range(k))), align="center")
         for i,rect in enumerate(bar_top):

@@ -8,12 +8,12 @@ if __name__=='__main__':
     if encoder == "AA":
         ks = [21]
     else:
-        ks = [20, 25, 30]
-    rs = [1,2,4]
-    alphas = [0.0001, 0.001, 0.01, 0.1]
-    taus = [2, 4, 8]
-    lambdas = [0.5] # keep as elastic
-    cutoffs = [6.0, 8.0] # edge cutoff for protein graph
+        ks = [15, 20, 25, 30]
+    rs = [0,1,2,4]
+    alphas = [1.0]#[0.0001, 0.001, 0.01]
+    taus = [0, 1, 2, 4]
+    lambdas = [] # keep as elastic
+    cutoffs = [8.0] # edge cutoff for protein graph
 
     proc_args = {"datatype": "protein",
             "k": None,

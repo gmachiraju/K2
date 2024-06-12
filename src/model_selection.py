@@ -83,21 +83,25 @@ def top_model_continuous_avg(metric_str, results_cache_dir, model_cache_dir, ret
     valid_metrics = ["auroc", "auprc", "ap"]
     _ = check_eval_metric(metric_str, valid_metrics)
     metric_dict = {}
+    
     for model_str in os.listdir(model_cache_dir):
         model_results_dict = deserialize(os.path.join(results_cache_dir, model_str))
         scores = []
+        num_zeros = 0
         for graph_id in model_results_dict.keys():
             datum_results_dict = model_results_dict[graph_id]
             y = get_label(datum_results_dict)
             if y == 0:
                 continue
+            if datum_results_dict["cont"]["auroc"] == 0.5:
+                num_zeros += 1
             scores.append(datum_results_dict["cont"][metric_str])
-        metric_dict[model_str] = np.mean(scores)
+        metric_dict[model_str] = np.mean(scores), num_zeros
     if return_all:
         data = []
-        for model_str, score in metric_dict.items():
-            data.append([model_str,score])
-        return pd.DataFrame(data, columns=['model_name', 'score'])
+        for model_str, (score, num_zeros) in metric_dict.items():
+            data.append([model_str,score,num_zeros])
+        return pd.DataFrame(data, columns=['model_name', 'score', 'num_zeros'])
     else:
         # get top model
         top_model_str = max(metric_dict, key=lambda item: metric_dict[item])
@@ -121,7 +125,7 @@ def top_model_continuous_iid(metric_str, model_cache_dir, linearized_cache_dir, 
         metric_dict[model_str] = metric(preds, gts)
     if return_all:
         data = []
-        for model_str, (_, score, _) in metric_dict.items():
+        for model_str, score in metric_dict.items():
             data.append([model_str,score])
         return pd.DataFrame(data, columns=['model_name', 'score'])
     else:

@@ -557,21 +557,41 @@ def visualize_GTmap(arr, sprite_arr):
 #===========================================
 # utility functions for visualizing proteins
 #===========================================
+from Bio.PDB import PDBList, PDBParser, Select, PDBIO
+from Bio.PDB.Selection import unfold_entities
+pdbl = PDBList()
+class NonHetSelect(Select):
+    def accept_residue(self, residue):
+        return 1 if residue.id[0] == " " else 0
 
-def load_structure(pdbc, pdb_dir='/scratch/users/aderry/pdb'):
-    from collapse import process_pdb
-    from atom3d.util.formats import df_to_bp
+def load_structure(pdbc, pdb_dir='../data'):
+    # from collapse import process_pdb
+    # from atom3d.util.formats import df_to_bp
     
     pdb, chain = pdbc[:4], pdbc[-1]
-    fname = os.path.join(pdb_dir, pdb[1:3], f'pdb{pdb}.ent.gz')
-    df = process_pdb(fname, chain=chain, include_hets=False)
-    return df_to_bp(df)
+    # fname = os.path.join(pdb_dir, f'{pdb}.pdb')
+    # df = process_pdb(fname, chain=chain, include_hets=False)
     
-def visualize_protein_sprite(sprite, prospect_flag=False, gt_flag=False):
+    pdbl.retrieve_pdb_file(pdb, pdir='../data', file_format='pdb')
+    bp = PDBParser().get_structure(pdbc, f'../data/pdb{pdb}.ent')
+    io = PDBIO()
+    io.set_structure(bp)
+    io.save(f'../data/pdb{pdb}.ent', NonHetSelect())
+    bp = PDBParser().get_structure(pdbc, f'../data/pdb{pdb}.ent')
+    
+    for c in unfold_entities(bp, "C"):
+        if c.id == chain:
+            return c
+    # return bp
+    
+def visualize_protein_sprite(sprite, prospect_flag=False, gt_flag=False, colors=None):
     import nglview
     from matplotlib.colors import rgb2hex, Normalize
     
-    our_cmap = custom_cmap
+    if colors is not None:
+        our_cmap = matplotlib.colors.ListedColormap(colors, name='from_list')
+    else:
+        our_cmap = joint_cmap
     if prospect_flag:
         our_cmap = plt.get_cmap("bwr")
         maxmag = get_prospect_range(sprite)
@@ -587,6 +607,9 @@ def visualize_protein_sprite(sprite, prospect_flag=False, gt_flag=False):
     scheme = nglview.color._ColorScheme(color_resids, 'sprite')
     view = nglview.show_biopython(struct, default_representation=False)
     view.add_cartoon(color=scheme)
+    # view.add_ball_and_stick(color=scheme)
+    # view.add_surface(color=scheme)
+    view.center_view()
     return view
 
 class AAQuantizer(object):

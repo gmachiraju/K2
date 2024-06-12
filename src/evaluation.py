@@ -48,8 +48,8 @@ def train_gridsearch(sweep_dict, save_dir, encoder_name, gt_dir, process_args, m
         if not np.isnan(cutoff):
             if encoder_name == 'AA':
                 encoder_name = 'COLLAPSE'
-            process_args["embeddings_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_embeddings.pkl"
-            model_args["train_graph_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_graphs"
+            process_args["embeddings_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_embeddings_2.pkl"
+            model_args["train_graph_path"] = f"../data/{encoder_name}_{dataset}_{cutoff}_train_graphs_2"
         for k in sweep_dict["k"]:
             proc, processor_name = fetch_processor(k, proc_cache_dir, process_args, cutoff=cutoff)
             # if process_args["embeddings_type"] == "memmap" and process_args["datatype"] == "histo":
@@ -99,7 +99,7 @@ def gridsearch_iteration(model, model_args, gt_dir, thresh="all", arm="train", s
         model_results_dict: a dictionary of metrics
     """
     if thresh == "all":
-        reg_thresholds = [np.round(el,1) for el in np.linspace(0,1,11)] # [0.1, 0.2, ..., 0.9, 1.0]
+        reg_thresholds = [np.round(el,2) for el in np.linspace(0,1,21)] # [0.1, 0.2, ..., 0.9, 1.0]
         idx_adaptive = len(reg_thresholds)
         thresholds = reg_thresholds + [np.nan, np.nan] # placeholders for adaptive
     else:
@@ -307,9 +307,21 @@ def eval_suite(G_name, P, Y, y, y_hat, thresholds, skip_msd=False):
     if y == 1:
         # try:
         datum_cont = {"auroc": auroc(P_vec, Y_vec), "auprc": auprc(P_vec, Y_vec), "ap": ap(P_vec, Y_vec)}
+        # if not np.all(P_vec == 0.5):
+        #     print(G_name)
+        #     print(list(zip(P_vec, Y_vec)))
+        #     print(ap(P_vec, Y_vec))
+        # if np.all(P_vec == 0.5):
+        #     print(datum_cont)
+        #     datum_cont['auprc'] = 0.0
+        #     print('CHECK THIS ONE \n \n \n \n')
+        #     print(P_vec)
+        #     print(datum_cont['auprc'])
         # except ValueError:
         #     pdb.set_trace()
         # _dict[(G_name, y)]
+        # print(datum_cont)
+        # print(P_vec, Y_vec)
 
     # compute predictions from maps
     #------------------------------

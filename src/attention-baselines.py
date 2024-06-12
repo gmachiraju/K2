@@ -107,11 +107,12 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--dim', type=int, default=100)
     parser.add_argument('--run_name', type=str, default='baseline-GAT')
     parser.add_argument('--eval_only', action='store_true')
     args = parser.parse_args()
     
-    args.run_name = args.run_name + f'-{args.encoder}-{args.metal}-{args.cutoff:.1f}-{args.lr}'
+    args.run_name = args.run_name + f'-{args.encoder}-{args.metal}-{args.cutoff:.1f}-{args.lr}-{args.dim}'
     # wandb.init(project="K2", name=args.run_name)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -126,14 +127,14 @@ if __name__ == '__main__':
         encoder_name = 'COLLAPSE'
         in_dim = 21
     
-    train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{args.cutoff:.1f}_train_graphs"
-    test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{args.cutoff:.1f}_test_graphs"
+    train_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{args.cutoff:.1f}_train_graphs_2"
+    test_graph_path = f"{args.base_dir}/{encoder_name}_{args.metal}_{args.cutoff:.1f}_test_graphs_2"
     train_dataset = ProteinData(train_graph_path, args.encoder)
     test_dataset = ProteinData(test_graph_path, args.encoder)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
     
-    model = GAT(in_dim, 100).to(device)
+    model = GAT(in_dim, args.dim).to(device)
     
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-4, lr=args.lr)
     criterion = torch.nn.BCEWithLogitsLoss()
@@ -153,37 +154,37 @@ if __name__ == '__main__':
             print(f'Train loss: {train_loss} | Test loss: {test_loss}')
     
     quit()
-    model.load_state_dict(torch.load(f'../data/baselines/{args.run_name}-best.pt'))
-    model = model.to(device)
-    model.eval()
+    # model.load_state_dict(torch.load(f'../data/baselines/{args.run_name}-best.pt'))
+    # model = model.to(device)
+    # model.eval()
     
-    test_loss, y_true, y_pred = eval(model, test_loader, criterion, device)
-    test_auroc = metrics.auroc(y_pred, y_true)
-    test_auprc = metrics.auprc(y_pred, y_true)
-    print('Test AUROC:', test_auroc)
-    print('Test AUPRC:', test_auprc)
+    # test_loss, y_true, y_pred = eval(model, test_loader, criterion, device)
+    # test_auroc = metrics.auroc(y_pred, y_true)
+    # test_auprc = metrics.auprc(y_pred, y_true)
+    # print('Test AUROC:', test_auroc)
+    # print('Test AUPRC:', test_auprc)
     
-    train_loader = DataLoader(train_dataset, batch_size=1)
+    # train_loader = DataLoader(train_dataset, batch_size=1)
     
-    model_config = ModelConfig(mode=ModelMode.binary_classification, task_level='graph', return_type='raw')
+    # model_config = ModelConfig(mode=ModelMode.binary_classification, task_level='graph', return_type='raw')
     
-    thresholds = [np.round(el,1) for el in np.linspace(0,1,11)]
-    for t in thresholds:
-        threshold_config = ThresholdConfig(threshold_type='hard', value=t)
-        explainer = Explainer(model, algorithm=GNNExplainer(), model_config=model_config, explanation_type='phenomenon', node_mask_type='object', threshold_config=threshold_config)
-        precs = []
-        for g, y in train_loader:
-            g = g.to(device)
-            y = y.to(device)
-            if y.squeeze() == 0:
-                continue
-            explanation = explainer(x=g.x, edge_index=g.edge_index, target=y.long())
-            # print(explanation)
-            y_pred = explanation.node_mask.cpu().squeeze().numpy()
-            y_true = g.gt.cpu().numpy()
-            ravel = metrics.confusion(y_pred, y_true)
-            # ravel = confusion_matrix(P_bin_vec, Y_1hop)
-            precision = metrics.precision(ravel)
-            precs.append(precision)
-            break
-        print(t, np.mean(precision))
+    # thresholds = [np.round(el,1) for el in np.linspace(0,1,11)]
+    # for t in thresholds:
+    #     threshold_config = ThresholdConfig(threshold_type='hard', value=t)
+    #     explainer = Explainer(model, algorithm=GNNExplainer(), model_config=model_config, explanation_type='phenomenon', node_mask_type='object', threshold_config=threshold_config)
+    #     precs = []
+    #     for g, y in train_loader:
+    #         g = g.to(device)
+    #         y = y.to(device)
+    #         if y.squeeze() == 0:
+    #             continue
+    #         explanation = explainer(x=g.x, edge_index=g.edge_index, target=y.long())
+    #         # print(explanation)
+    #         y_pred = explanation.node_mask.cpu().squeeze().numpy()
+    #         y_true = g.gt.cpu().numpy()
+    #         ravel = metrics.confusion(y_pred, y_true)
+    #         # ravel = confusion_matrix(P_bin_vec, Y_1hop)
+    #         precision = metrics.precision(ravel)
+    #         precs.append(precision)
+    #         break
+    #     print(t, np.mean(precision))
