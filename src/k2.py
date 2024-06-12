@@ -877,6 +877,7 @@ class K2Model():
         - https://stackoverflow.com/questions/65810567/aligning-subplots-with-a-pyplot-barplot-and-seaborn-heatmap
         - https://stackoverflow.com/questions/33379261/how-can-i-have-a-bar-next-to-python-seaborn-heatmap-which-shows-the-summation-of 
         - https://stackoverflow.com/questions/40489821/how-to-write-text-above-the-bars-on-a-bar-plot-python
+        - https://stackoverflow.com/questions/36560829/how-to-create-a-seaborn-heatmap-with-frames-around-the-tiles
         """
         k = len(list(G.nodes))
         M = np.zeros((k,k))
