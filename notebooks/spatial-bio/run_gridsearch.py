@@ -35,10 +35,10 @@ model_args = {"modality": "cells",
         "train_graph_path": G_dir,
         "train_label_dict": label_dict}
 
-ks = [8,10,12,14,16,18,20]
-rs = [1,2,4,8]
+ks = [20] #[8,9,10,11,12,13,14,15,16,17,18,19,20]
+rs = [1,2,3,4,5,6,7,8]
 alphas = [1e10] # 0.01, 0.025, 0.05
-taus = [0,1,2]
+taus = [0] #used to also have [1,2]
 lambdas = [0.5] # keep as elastic
 
 def main():    

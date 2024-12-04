@@ -1,5 +1,6 @@
 import numpy as np
 import networkx as nx
+import pandas as pd
 import pickle
 import dill
 
@@ -9,6 +10,14 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 import os
 import pdb
+
+# import holoviews as hv
+# from holoviews import opts, dim
+# from bokeh.sampledata.les_mis import data
+# hv.extension('bokeh')
+# hv.output(size=200)
+
+
 CMAP="tab20"
 custom_cmap = plt.get_cmap(CMAP)
 custom_cmap.set_bad(color='white')
@@ -16,7 +25,59 @@ custom_cmap.set_bad(color='white')
 # deals with more than 20 colors
 CMAP2 = "Pastel2"
 joint_cmap = colors.ListedColormap(cm.tab20.colors + cm.Pastel2.colors, name='tab40')
-joint_cmap.set_bad(color='white')
+joint_cmap.set_bad(color='lightgray') #used to be white
+
+# cell graphs
+colors_salcells = ["lightgray", "red"]
+cmap_salcells = colors.ListedColormap(colors_salcells)
+norm_salcells = colors.BoundaryNorm(np.arange(-0.5,2), cmap_salcells.N) 
+
+colors_type = ["thistle", "orchid"] # plum
+cmap_type = colors.ListedColormap(colors_type)
+norm_type = colors.BoundaryNorm(np.arange(0.5,3), cmap_type.N) 
+
+
+
+# experimental inference mode
+def prospect_diffusive(k2model, G):
+    # construct sprite via quantization
+    S = k2model.construct_sprite(G)
+    P = S.copy()
+    # reset P's nodes to 0 
+    for node in P.nodes:
+        P.nodes[node]['emb'] = 0.0
+    
+    # nonlinear convolve with hashmap
+    for node in S.nodes:
+        # load node presence in weighted graph
+        node_motif = S.nodes[node]['emb']
+        P.nodes[node]['emb'] += k2model.w_hgraph.nodes[node_motif]["n_weight"]
+
+        if k2model.r > 0:
+            # load in edge presence in weighted graph (skipgrams)
+            subgraph = nx.ego_graph(S, node, radius=k2model.r) 
+            # pdb.set_trace()
+            # now get nodes 1 hop away
+            core = [set([])]
+            
+            powers = np.array(list(range(1, k2model.r+1)))
+            denoms = np.power(2, powers)
+            weights = 1 / denoms
+            for i in range(1, k2model.r+1):
+                hop_i = nx.ego_graph(subgraph, node, radius=i)
+                neighbors_uptoi = set(list(hop_i.nodes())) - set([node])
+                core.append(neighbors_uptoi)
+                neighbors_i = list(set(neighbors_uptoi) - set(core[i-1]))
+                nhbr_motifs = [S.nodes[n]['emb'] for n in neighbors_i]
+                unique, counts = np.unique(nhbr_motifs, return_counts=True) 
+
+                for idx, u in enumerate(unique):
+                    P.nodes[node]['emb'] += weights[i-1] * (k2model.w_hgraph.edges[(node_motif,u)]["e_weight"] * counts[idx])
+    
+    # return prospect map P w/ class-differential nodes
+    return P
+
+
 
 #================================================================
 # General functions for saving/loading data
@@ -136,6 +197,11 @@ def rescale_graph(G):
         R.nodes[node]['emb'] = rescaled_vals[idx]
     return R
 
+def binarize_graph_0(G):
+    # automatic binarization
+    B = binarize_graph(G, 0.0)
+    return B
+
 def binarize_graph_otsu(G):
     # automatic binarization
     G = rescale_graph(G)
@@ -144,7 +210,7 @@ def binarize_graph_otsu(G):
     B = binarize_graph(G, thresh)
     return B
 
-def binarize_graph(G, thresh, conditional=None):
+def binarize_graph(G, thresh, conditional=">"):
     """
     Binarize graph based on threshold
     Inputs:
@@ -176,7 +242,7 @@ def rescale_vec(vec):
         return np.ones(vec.shape) * 0.5
     return (vec - np.min(vec)) / denom
 
-def binarize_vec(vec, thresh, conditional=None):
+def binarize_vec(vec, thresh, conditional=">"):
     if conditional == "<":
         return np.where(vec < thresh, 1, 0)
     return np.where(vec > thresh, 1, 0)
@@ -398,7 +464,7 @@ def visualize_sprite(G, modality="graph", prospect_flag=False, gt_flag=False, ch
     plt.draw()
     
     
-def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=False):
+def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=False, binarized_flag=False, edge_flag=True, alpha_flag=False):
     """Plot dot-line graph for the cellular graph
     Adapted from SPACE_GM codebase
     Args:
@@ -408,40 +474,415 @@ def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=Fal
     # Extract basic node attributes
     node_coords = [G.nodes[n]['center_coord'] for n in G.nodes]
     node_coords = np.stack(node_coords, 0)
-    plt.figure()
+    fig = plt.figure(figsize=(10, 7))
     
+    prot_feats = list(G.nodes[0]["biomarker_expression"].keys())
+    if key not in prot_feats:
+        print("key not in prot_feats")
+        node_vals = [G.nodes[n][key] for n in G.nodes]
+        # print(node_vals)
+        min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+        print("min/max values:", min_val, max_val)
+        
     if prospect_flag == True:
-        node_colors = [matplotlib.cm.get_cmap("bwr")([G.nodes[n][key]]) for n in G.nodes]
+        if binarized_flag == False:
+            node_colors = [matplotlib.cm.get_cmap("bwr")([G.nodes[n][key]]) for n in G.nodes]
+        else:
+            node_colors = [cmap_salcells([G.nodes[n][key]]) for n in G.nodes]
     else:
         if node_colors is None:
-            unique_cell_types = sorted(set([G.nodes[n][key] for n in G.nodes]))
-            cell_type_to_color = {ct: matplotlib.cm.get_cmap("tab20")(i % 20) for i, ct in enumerate(unique_cell_types)}
-            node_colors = [cell_type_to_color[G.nodes[n][key]] for n in G.nodes]
+            if key == "cell_type":
+                print("using extended colormap")
+                unique_cell_types = sorted(set([G.nodes[n][key] for n in G.nodes]))
+                print("unique cell types:", unique_cell_types)
+                # cell_type_to_color = {ct: matplotlib.cm.get_cmap("tab20")(i % 20) for i, ct in enumerate(unique_cell_types)}
+                cell_type_to_color = {ct: cmap_type(i) for i, ct in enumerate(unique_cell_types)}
+                node_colors = [cell_type_to_color[G.nodes[n][key]] for n in G.nodes]
+                # pdb.set_trace()
+                # print(node_colors)
+            elif key in prot_feats:
+                node_vals = [G.nodes[n]["biomarker_expression"][key] for n in G.nodes]
+                min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+                norm = plt.Normalize(min_val, max_val)
+                if alpha_flag == False:
+                    node_colors = [matplotlib.cm.get_cmap("viridis")(norm(nv)) for nv in node_vals]
+                else:
+                    print("using extended colormap")
+                    unique_cell_types = sorted(set([G.nodes[n]["salient"] for n in G.nodes]))
+                    print("unique cell types:", unique_cell_types)
+                    node_colors = [joint_cmap([G.nodes[n]["salient"]]) for n in G.nodes]
+                    alphas = [norm(nv) for nv in node_vals]
+                    print(alphas)
+                # node_colors = [matplotlib.cm.get_cmap("viridis")(G.nodes[n]["biomarker_expression"][key]) for n in G.nodes]
+            
+            elif key in ['AREA_CELL', 'ECCENTRICITY', 'MAJORAXISLENGTH', 'MINORAXISLENGTH', 'PERIMETER']:
+                node_vals = [G.nodes[n][key] for n in G.nodes]
+                min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+                norm = plt.Normalize(min_val, max_val)
+                if alpha_flag == False:
+                    node_colors = [matplotlib.cm.get_cmap("viridis")(norm(nv)) for nv in node_vals]
+                else:
+                    print("using extended colormap")
+                    unique_cell_types = sorted(set([G.nodes[n]["salient"] for n in G.nodes]))
+                    print("unique cell types:", unique_cell_types)
+                    node_colors = [joint_cmap([G.nodes[n]["salient"]]) for n in G.nodes]
+                    alphas = [norm(nv) for nv in node_vals]
+                    print(alphas)
+
+                # print(node_colors)
+            else:
+                print("using extended colormap")
+                unique_cell_types = sorted(set([G.nodes[n][key] for n in G.nodes]))
+                print("unique cell types:", unique_cell_types)
+                node_colors = [joint_cmap([G.nodes[n][key]]) for n in G.nodes]
+            
             
     assert len(node_colors) == node_coords.shape[0]
-    for (i, j, edge_type) in G.edges.data():
-        xi, yi = G.nodes[i]['center_coord']
-        xj, yj = G.nodes[j]['center_coord']
-        if edge_type['edge_type'] == 'neighbor':
-            plotting_kwargs = {"c": "k",
-                               "linewidth": 1,
-                               "linestyle": '-'}
-        else:
-            plotting_kwargs = {"c": (0.4, 0.4, 0.4, 1.0),
-                               "linewidth": 0.3,
-                               "linestyle": '--'}
-        plt.plot([xi, xj], [yi, yj], zorder=1, **plotting_kwargs)
-
-    plt.scatter(node_coords[:, 0],
+    
+    if edge_flag == True:
+        n_thickness = 0.05 # used to be 1, 0.5
+        d_thickness = 0.05  # 0.3
+        n_color = (0.4, 0.4, 0.4, 1.0) #"lightgray" # "k"
+        d_color = (0.4, 0.4, 0.4, 1.0)
+        
+        for (i, j, edge_type) in G.edges.data():
+            xi, yi = G.nodes[i]['center_coord']
+            xj, yj = G.nodes[j]['center_coord']
+            if edge_type['edge_type'] == 'neighbor':
+                plotting_kwargs = {"c": n_color,
+                                "linewidth": n_thickness, # used to be 1
+                                "linestyle": '-'}
+            else:
+                plotting_kwargs = {"c": d_color,
+                                "linewidth": d_thickness,
+                                "linestyle": '--'}
+                
+            plt.plot([xi, xj], [yi, yj], zorder=1, **plotting_kwargs)
+        
+    # else: 
+    #     n_thickness = 0 #0.1
+    #     d_thickness = 0 #0.1
+    #     n_color = (0.4, 0.4, 0.4, 1.0)
+    #     d_color = (0.4, 0.4, 0.4, 1.0)
+        
+    if alpha_flag == True:
+        plt.scatter(node_coords[:, 0],
                 node_coords[:, 1],
+                marker='o',
                 s=10,
                 c=node_colors,
+                alpha=alphas,
                 linewidths=0.3,
                 zorder=2)
-    plt.xlim(0, node_coords[:, 0].max() * 1.01)
-    plt.ylim(0, node_coords[:, 1].max() * 1.01)
+        
+    else:
+        plt.scatter(node_coords[:, 0],
+                    node_coords[:, 1],
+                    marker='o',
+                    s=10,
+                    c=node_colors,
+                    linewidths=0.3,
+                    zorder=2)
+    
+    # new stuff
+    if prospect_flag == True:
+        if binarized_flag == False:
+            norm = plt.Normalize(min_val, max_val)
+            sm = plt.cm.ScalarMappable(norm=norm, cmap="bwr")
+        else:
+            # norm = plt.Normalize(min_val, max_val)
+            sm = plt.cm.ScalarMappable(norm=norm_salcells, cmap=cmap_salcells)
+    else:
+        if alpha_flag == False:
+            if key == "cell_type":
+                # norm = plt.Normalize(min_val, max_val)
+                sm = plt.cm.ScalarMappable(norm=norm_type, cmap=cmap_type)
+            elif key in prot_feats or key in ['AREA_CELL', 'ECCENTRICITY', 'MAJORAXISLENGTH', 'MINORAXISLENGTH', 'PERIMETER']:
+                norm = plt.Normalize(min_val, max_val)
+                sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
+            else: # concepts
+                norm = plt.Normalize(min_val, max_val)
+                sm = plt.cm.ScalarMappable(norm=norm, cmap=joint_cmap)
+        else:
+            unique_cell_types = sorted(set([G.nodes[n]["salient"] for n in G.nodes]))
+            min_val, max_val = np.nanmin(unique_cell_types), np.nanmax(unique_cell_types)
+            norm = plt.Normalize(min_val, max_val)
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=joint_cmap)
+            
+    cbar = plt.colorbar(
+        sm,
+        ax=plt.gca(),
+        orientation='vertical',
+    )
+    
+    # if prospect_flag == False:
+    cbar.set_ticks([])
+    
+    # plt.xlim(-0.05, node_coords[:, 0].max() * 1.05)
+    # plt.ylim(-0.05, node_coords[:, 1].max() * 1.05)
+    plt.axis('off')
+    plt.show()
+    return fig
+
+def exists_1(x):
+    if (1 in x) or (-1 in x):
+        return np.mean(x)
+    return 0
+
+def mean_over_cutoff(x):
+    return np.mean(x) > 0
+
+def magnitude(x):
+    return np.max(x) - np.min(x)
+
+def joint_population_cutoff(x):
+    unique, counts = np.unique(x, return_counts=True)
+    # print("unique:", unique)
+    if len(unique) == 1:
+        return 0
+    if len(unique) == 2:
+        if 0 in unique:
+            return 0
+        else:
+            return 1
+    else:
+        return 1
+
+def raw_counts(x):
+    return np.sum(x)
+
+# def concept_expression_cutoff(x):
+#     unique, counts = np.unique(x, return_counts=True)
+#     # print("unique:", unique)
+#     if len(unique) == 1:
+#         if np.nan in unique:
+#             return -1
+#     if len(unique) == 2:
+#         if 1 in unique:
+#             return 1
+#         else:
+#             return 0
+#     else:
+#         return 1
+
+def concept_expression_cutoff(x):
+    # return np.max(x)
+    non_negs = [nv for nv in x if nv >= 0]
+    if len(non_negs) == 0:
+        return -1
+    return np.mean(non_negs) > 0.5
+
+
+def visualize_sal_hexbin(G, concept):
+    # Extract basic node attributes
+    node_coords = [G.nodes[n]['center_coord'] for n in G.nodes]
+    node_coords = np.stack(node_coords, 0)
+    
+    node_vals = [1 if G.nodes[n]["salient"] == concept else 0 for n in G.nodes]
+    print(node_vals)
+    min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals) 
+    
+    colors_custom = [joint_cmap(np.nan), joint_cmap(concept)] 
+    cmap_custom = colors.ListedColormap(colors_custom)
+    
+    plt.figure()
+    norm = colors.BoundaryNorm(np.arange(-0.5,2), cmap_custom.N) 
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_custom)
+    plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_custom, reduce_C_function=mean_over_cutoff)
+    cbar = plt.colorbar(
+        sm,
+        ax=plt.gca(),
+        orientation='vertical',
+    )
+    # cbar.set_ticks([])
     plt.axis('off')
     return
+
+
+def visualize_concept_density_hexbin(G, concept, viz_flag=True):
+    # Extract basic node attributes
+    node_coords = [G.nodes[n]['center_coord'] for n in G.nodes]
+    node_coords = np.stack(node_coords, 0)
+    node_vals = [1 if G.nodes[n]["concept"] == concept else 0 for n in G.nodes]
+    min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+
+    colors_custom = [joint_cmap(np.nan), joint_cmap(concept)] 
+    cmap_custom = colors.LinearSegmentedColormap.from_list("Custom", colors_custom, N=100)
+
+    fig = plt.figure()
+    coll = plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_custom, reduce_C_function=raw_counts)
+    cbar = plt.colorbar(orientation="vertical")
+    plt.axis('off')
+    plt.show(block=True)
+    plt.close(fig)
+    plt.close("all")
+    return coll
+
+def visualize_cluster_density_hexbin(G, cluster, viz_flag=True):
+    # Extract basic node attributes
+    node_coords = [G.nodes[n]['center_coord'] for n in G.nodes]
+    node_coords = np.stack(node_coords, 0)
+    node_vals = [1 if G.nodes[n]["cluster"] == cluster else 0 for n in G.nodes]
+    min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+
+    colors_custom = [joint_cmap(np.nan), joint_cmap(cluster)] 
+    cmap_custom = colors.LinearSegmentedColormap.from_list("Custom", colors_custom, N=100)
+
+    fig = plt.figure()
+    coll = plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_custom, reduce_C_function=raw_counts)
+    cbar = plt.colorbar(orientation="vertical")
+    plt.axis('off')
+    plt.show(block=True)
+    plt.close(fig)
+    plt.close("all")
+    return coll
+
+
+def visualize_cell_hexbin(G, concepts, key, mode="expression", cmap_str="gray", global_means=None, mag_flag=False):
+    coll = None
+    if (concepts is not None) and (len(concepts) > 2):
+        print("Error: Can analyze at max 2 concepts at a time")
+        return
+    
+    # Extract basic node attributes
+    node_coords = [G.nodes[n]['center_coord'] for n in G.nodes]
+    node_coords = np.stack(node_coords, 0)
+    prot_feats = list(G.nodes[0]["biomarker_expression"].keys())
+    
+    if ("expression" in mode):
+        if key not in prot_feats:
+            node_vals = [G.nodes[n][key] for n in G.nodes]
+            min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+            print("min/max values:", min_val, max_val)
+        else:
+            node_vals = [G.nodes[n]["biomarker_expression"][key] for n in G.nodes]
+            min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+        if global_means is not None:
+            mu = global_means[key]
+            node_vals = [1 if nv > mu else 0 for nv in node_vals]
+        
+        if mode == "concept_expression":
+            mu = global_means[key]
+            node_vals = [1 if nv > mu else 0 for nv in node_vals]
+    else:
+        if len(concepts) == 1:
+            node_vals = [1 if G.nodes[n]["concept"] == concepts[0] else 0 for n in G.nodes]
+            min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+            print(node_vals)
+            print(min_val, max_val)
+        else:
+            node_vals1 = [1 if G.nodes[n]["concept"] == concepts[0] else 0 for n in G.nodes]
+            node_vals2 = [-1 if G.nodes[n]["concept"] == concepts[1] else 0 for n in G.nodes]
+            node_vals = [node_vals1[i] + node_vals2[i] for i in range(len(node_vals1))]
+            min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+            print(min_val, max_val)
+            # pdb.set_trace()
+        
+    if mode == "expression":
+        pass
+    elif mode == "concept":
+        # pdb.set_trace()
+        if len(concepts) == 1:
+            colors_custom = [joint_cmap(np.nan), joint_cmap(concepts[0])] 
+        else:
+            colors_custom = [joint_cmap(np.nan), "darkgoldenrod"]
+        cmap_custom = colors.LinearSegmentedColormap.from_list("Custom", colors_custom, N=100)
+        # norm = plt.Normalize(min_val, max_val)
+    
+    fig = plt.figure(figsize=(10, 7))
+    if mode == "expression":
+        if global_means is not None:
+            norm = plt.Normalize(min_val, max_val)
+            node_vals = [norm(nv) for nv in node_vals]
+            colors_custom = [joint_cmap(np.nan), joint_cmap(concepts[0])] 
+            cmap_custom = colors.LinearSegmentedColormap.from_list("Custom", colors_custom, N=100)
+            # sm = plt.cm.ScalarMappable(norm=norm, cmap=)
+            # plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_str)
+            print("Error: not implemented!")
+            exit()
+        else:    
+            norm = plt.Normalize(min_val, max_val)
+            node_vals = [norm(nv) for nv in node_vals]
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_str)
+            if mag_flag == True:
+                plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_str, reduce_C_function=magnitude)
+            else:
+                plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_str)
+    
+    
+    elif mode == "concept":
+        # norm = plt.Normalize(min_val, max_val)
+        # sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_custom)
+        if len(concepts) == 1:
+            coll = plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_custom, reduce_C_function=mean_over_cutoff)
+        else:
+            coll = plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_custom, reduce_C_function=joint_population_cutoff)
+    
+    
+    elif mode == "concept_expression":
+        if len(concepts) == 1:
+            concept_exists = [1 if G.nodes[n]["concept"] in concepts else np.nan for n in G.nodes] # -1
+            node_vals = np.array(node_vals) * np.array(concept_exists)
+            node_vals = [nv if not np.isnan(nv) else -1 for nv in node_vals]
+            
+            min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
+            print(min_val, max_val)
+            
+            colors_custom = [joint_cmap(np.nan),"k",joint_cmap(concepts[0])]
+            cmap_custom = colors.ListedColormap(colors_custom)
+            # cmap_custom.set_bad(color=joint_cmap(np.nan))
+            
+            norm = colors.BoundaryNorm(np.arange(-1.5,2), cmap_custom.N) 
+            # norm = plt.Normalize(min_val, max_val)
+            # node_vals = [norm(nv) for nv in node_vals]
+            
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_custom)
+            plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_custom, reduce_C_function=concept_expression_cutoff)
+        else:
+            print("Error: not implemented!")
+            return
+    elif mode == "salient_concept_expression":
+        pass
+    
+    if mode in ["expression", "concept_expression"]:
+        cbar = plt.colorbar(
+            sm,
+            ax=plt.gca(),
+            orientation='vertical',
+        )
+    else:
+        cbar = plt.colorbar(orientation="vertical")
+        # cbar.set_ticks([])
+    plt.axis('off')
+    plt.show()
+    return coll
+
+    
+    
+
+
+# def visualize_kernel_chord(betas):
+#     nodes = []
+#     source, target, value = [], [], []
+#     for beta in betas.items():
+#         if type(beta[0]) == int:
+#             nodes.append(str(beta[0]))
+#             continue
+#         source.append(str(beta[0][0]))
+#         target.append(str(beta[0][1]))
+#         value.append(beta[1])
+#     data = {'source':source, 'target':target, 'value':value}
+#     links = pd.DataFrame.from_dict(data)
+#     node_df = pd.DataFrame(nodes)
+#     node_df.columns = ['name']
+#     nodes = hv.Dataset(node_df, 'index')
+#     print(nodes)
+#     print(links)
+
+#     chord = hv.Chord((links, nodes))
+#     chord.opts(
+#         opts.Chord(cmap=joint_cmap, edge_cmap='bwr', edge_color=dim('value').str(), 
+#                labels='name', node_color=dim('index').str()))
 
 
 def convert_graph2arr(S):
@@ -461,8 +902,21 @@ def convert_graph2arr(S):
         A[:] = np.nan
         for node in S.nodes():
             A[:,node,:] = S.nodes[node]['emb']
-
     return A
+
+
+def convert_graph2df(S, key):
+    """
+    Take positional info for each node as well as key values
+    """
+    coords = nx.get_node_attributes(S, "center_coord")
+    concepts = nx.get_node_attributes(S, "concept")
+    df = pd.DataFrame(coords).T
+    df.columns = ["x", "y"]
+    df["concept"] = concepts.values()
+    return df
+    
+
 
 def convert_GTgraph2arr(S):
     try:
