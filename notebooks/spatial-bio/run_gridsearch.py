@@ -6,10 +6,10 @@ from utils import serialize_model, deserialize_model, serialize, deserialize
 import numpy as np
 import os
 
-proc_cache_dir = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/outputs/gridsearch_results/k2processors"
-model_cache_dir = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/outputs/gridsearch_results/k2models"
-embeds_path = "/scr/biggest/gmachi/datasets/celldive_lung/embed_sample.obj"
-G_dir = "/scr/biggest/gmachi/datasets/celldive_lung/for_ml/for_prospect/"
+proc_cache_dir = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/outputs/gridsearch_results_final/k2processors"
+model_cache_dir = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/outputs/gridsearch_results_final/k2models"
+embeds_path = "/scr/biggest/gmachi/datasets/celldive_lung/embed_sample_final.obj"
+G_dir = "/scr/biggest/gmachi/datasets/celldive_lung/for_ml/for_prospect_final/"
 label_path = "/scr/biggest/gmachi/datasets/celldive_lung/processed/label_dict.obj"
 label_dict = deserialize(label_path)
 
@@ -35,11 +35,13 @@ model_args = {"modality": "cells",
         "train_graph_path": G_dir,
         "train_label_dict": label_dict}
 
-ks = [20] #[8,9,10,11,12,13,14,15,16,17,18,19,20]
-rs = [1,2,3,4,5,6,7,8]
-alphas = [1e10] # 0.01, 0.025, 0.05
-taus = [0] #used to also have [1,2]
+ks = [20] #[8,9,10,11,12,13,14,15,16,17,18,19,20] 
+# old run: [8,9,10,11,12,13,14,15,16,17,18,19,20]
+rs = [1,2,3,4,5,6,7,8] # [1,2,3,4,5,6,7,8]
+alphas = [0.05, 1e10] # [1e10] # 0.01, 0.025, 0.05
+taus = [0, 1] # [0] #used to also have [1,2]
 lambdas = [0.5] # keep as elastic
+
 
 def main():    
     num_ht = len(ks) * len(rs) * len(alphas) * len(taus)

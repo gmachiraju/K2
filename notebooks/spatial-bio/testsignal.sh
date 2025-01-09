@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --time=40:00:00
+#SBATCH --time=50:00:00
 #SBATCH --account=hazy
 #SBATCH --partition=hazy
 #SBATCH --job-name=test8
-#SBATCH --mem=24G
+#SBATCH --mem=25G
 
 # source /scr/biggest/gmachi/miniconda3/etc/profile.d
 conda activate /scr/biggest/gmachi/miniconda3/envs/kkenv

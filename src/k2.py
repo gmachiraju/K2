@@ -13,6 +13,7 @@ from time import sleep
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 import scipy
+from scipy.spatial import distance
 
 import utils
 import pdb
@@ -470,8 +471,6 @@ class K2Processor():
             plt.legend(labels=labels_legend)
             plt.show()
         
-        
-
     def instantiate_motif_graph(self):
         """
         Make motif graph K_k
@@ -485,8 +484,6 @@ class K2Processor():
             Kk.edges[edge]['e_weight'] = 0.0
         return Kk
     
-
-
 
 
 class K2Model():
@@ -580,6 +577,15 @@ class K2Model():
         self.training_data = np.vstack(X)
         n,p = self.training_data.shape
         self.labels = np.array(y)
+        
+        # getting pre-normed data for zero-shot classifier       
+        X = self.training_data
+        y = self.labels.astype(int)
+        X0 = X[y==0,:]
+        X1 = X[y==1,:]
+        self.X0_prenorm = np.mean(X0, axis=0)
+        self.X1_prenorm = np.mean(X1, axis=0)
+        
         if self.verbosity_flag == "full":
             print("Complete! Created a training array for few-shot classification...")
             print("Number of training examples:", n)
@@ -642,6 +648,14 @@ class K2Model():
         model = model.fit(X, y)
         self.classifier = model # storing classifier for test set classification
         self.B = model.coef_[0] # importance weights
+        
+    def zero_shot_classifier(self, x):
+        """
+        classifier for log2fc model
+        """
+        dist0 = distance.cosine(x, self.X0_prenorm)
+        dist1 = distance.cosine(x, self.X1_prenorm)
+        return np.argmin([dist0, dist1])
 
     def train_inferential_k2(self):
         """
@@ -682,7 +696,10 @@ class K2Model():
                 sig_mask.append(1)
 
         self.B = log2fc * np.array(sig_mask)
-        self.classifier = None # no classification capability
+        # save for classification
+        self.mu0 = mu0
+        self.mu1 = mu1
+        self.classifier = self.zero_shot_classifier # no classification capability
     
     def prospect(self, G):
         """
@@ -736,7 +753,7 @@ class K2Model():
 
     def embed_sprite(self, S):
         """
-        Embeds a graph into the embedding space
+        Embeds a graph into the prosepction embedding space
         Input:
             S: sprite graph
         Output:
@@ -777,7 +794,7 @@ class K2Model():
 
     def convert_motif2vec(self, Kk):
         """
-        Converts motif graph to datum vector.
+        Converts motif graph / sprite to datum vector.
         Inputs:
             Kk: networkx motif graph
         """
@@ -898,7 +915,7 @@ class K2Model():
             if h > 0:
                 if signs[i] > 0 and model_flag == True:
                     ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="red", ha='center', va='bottom', size=s)
-                elif signs[0] < 0 and model_flag == True:
+                elif signs[i] < 0 and model_flag == True:
                     ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="blue", ha='center', va='bottom', size=s)
                 else:
                     ax2.text(x_tick_pos[i], h, f'{signs[i] * h:.2f}', color="black", ha='center', va='bottom', size=s)

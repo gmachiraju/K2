@@ -129,7 +129,7 @@ def process_sentences(sents):
 #================================================================
 # useful transformations
 #----------------------------------------------------------------
-def linearize_graph(G):
+def linearize_graph(G, key="emb"):
     """
     Converts graph to datum vector. Useful for prospect analysis.
     Inputs:
@@ -137,15 +137,15 @@ def linearize_graph(G):
     """
     vec = {}
     for node in G.nodes:
-        vec[node] = G.nodes[node]['emb'] # value of prospect graph
+        vec[node] = G.nodes[node][key] # value of prospect graph
     sorted_keys = sorted(vec.keys()) # can inspect
     vec = np.array([vec[key] for key in sorted_keys]) # enforcing ordering of linear index
     return vec
 
-def set_graph_emb(G, attr=None):
+def set_graph_emb(G, attr=None, key="emb"):
     """sets emb attribute for each node using another attribute"""
     Y = G.copy()
-    nx.set_node_attributes(Y, nx.get_node_attributes(G, attr), 'emb')
+    nx.set_node_attributes(Y, nx.get_node_attributes(G, attr), key)
     return Y
 
 def expand_positive_nodes(G):
@@ -163,7 +163,7 @@ def expand_positive_nodes(G):
                 G_expanded.nodes[nhbr]['gt'] = 1
     return G_expanded
 
-def flatten_graph_embs(G):
+def flatten_graph_embs(G, key="emb"):
     """
     Flatten/squeeze graph embeddings.
     Inputs: 
@@ -173,12 +173,12 @@ def flatten_graph_embs(G):
     """
     R = G.copy()
     for node in G.nodes:
-        e = G.nodes[node]['emb']
+        e = G.nodes[node][key]
         flat_e = e[0][0]
-        R.nodes[node]['emb'] = flat_e
+        R.nodes[node][key] = flat_e
     return R
 
-def rescale_graph(G):
+def rescale_graph(G, key="emb"):
     """
     Min-max scaling to [0,1]. Helpful for importance values of K2 graph
     Inputs: 
@@ -189,12 +189,12 @@ def rescale_graph(G):
     R = G.copy()
     vals = {}
     for node in G.nodes:
-        vals[node] = G.nodes[node]['emb']
+        vals[node] = G.nodes[node][key]
     sorted_keys = sorted(vals.keys()) # can inspect
     val_vec = np.array([vals[key] for key in sorted_keys]) # enforcing ordering of linear index
     rescaled_vals = rescale_vec(val_vec)
     for idx, node in enumerate(R.nodes):
-        R.nodes[node]['emb'] = rescaled_vals[idx]
+        R.nodes[node][key] = rescaled_vals[idx]
     return R
 
 def binarize_graph_0(G):
@@ -202,15 +202,22 @@ def binarize_graph_0(G):
     B = binarize_graph(G, 0.0)
     return B
 
-def binarize_graph_otsu(G):
+def binarize_graph_otsu_without_norm(G, key="emb"):
     # automatic binarization
-    G = rescale_graph(G)
-    G_vec = linearize_graph(G)
+    G_vec = linearize_graph(G, key)
     thresh = threshold_otsu(G_vec)    
-    B = binarize_graph(G, thresh)
+    B = binarize_graph(G, thresh, key_in=key)
     return B
 
-def binarize_graph(G, thresh, conditional=">"):
+def binarize_graph_otsu(G, key="emb"):
+    # automatic binarization
+    G = rescale_graph(G, key)
+    G_vec = linearize_graph(G, key)
+    thresh = threshold_otsu(G_vec)    
+    B = binarize_graph(G, thresh, key_in=key)
+    return B
+
+def binarize_graph(G, thresh, conditional=">", key_in="emb", key_out="emb"):
     """
     Binarize graph based on threshold
     Inputs:
@@ -222,12 +229,12 @@ def binarize_graph(G, thresh, conditional=">"):
     B = G.copy()
     vals = {}
     for node in G.nodes:
-        vals[node] = G.nodes[node]['emb']
+        vals[node] = G.nodes[node][key_in]
     sorted_keys = sorted(vals.keys()) # can inspect
-    val_vec = np.array([vals[key] for key in sorted_keys]) # enforcing ordering of linear index
+    val_vec = np.array([vals[k] for k in sorted_keys]) # enforcing ordering of linear index
     binarized_vals = binarize_vec(val_vec, thresh, conditional=conditional)
     for idx, node in enumerate(B.nodes):
-        B.nodes[node]['emb'] = binarized_vals[idx]
+        B.nodes[node][key_out] = binarized_vals[idx]
     return B
 
 def rescale_vec(vec):
@@ -478,7 +485,7 @@ def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=Fal
     
     prot_feats = list(G.nodes[0]["biomarker_expression"].keys())
     if key not in prot_feats:
-        print("key not in prot_feats")
+        # print("key not in prot_feats")
         node_vals = [G.nodes[n][key] for n in G.nodes]
         # print(node_vals)
         min_val, max_val = np.nanmin(node_vals), np.nanmax(node_vals)
@@ -540,8 +547,8 @@ def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=Fal
     assert len(node_colors) == node_coords.shape[0]
     
     if edge_flag == True:
-        n_thickness = 0.05 # used to be 1, 0.5
-        d_thickness = 0.05  # 0.3
+        n_thickness = 0.08 # used to be 1, 0.5
+        d_thickness = 0.08  # 0.3
         n_color = (0.4, 0.4, 0.4, 1.0) #"lightgray" # "k"
         d_color = (0.4, 0.4, 0.4, 1.0)
         

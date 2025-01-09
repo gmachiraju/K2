@@ -1,5 +1,5 @@
 import pdb
-from utils import binarize_graph_otsu, binarize_graph_0, deserialize, serialize, visualize_cell_graph, deserialize_model
+from utils import binarize_graph_otsu, binarize_graph_otsu_without_norm,binarize_graph_0, deserialize, serialize, visualize_cell_graph, deserialize_model
 from utils import prospect_diffusive
 import networkx as nx
 import numpy as np
@@ -85,9 +85,9 @@ def get_salient_subgraphs(B):
     ccs = [c for c in nx.connected_components(B_drop)]
     return ccs
 
-def get_pooled_embeds(G_path, ccs, pool_fn="max"):
+def get_pooled_embeds(G_path, ccs, pool_fn="max", key="emb"):
     G = deserialize(G_path)
-    cc_embeds = [np.array([G.nodes[n]["emb"] for n in cc]) for cc in ccs]
+    cc_embeds = [np.array([G.nodes[n][key] for n in cc]) for cc in ccs]
     if pool_fn == "max":
         cc_pooled = [np.max(cc, axis=0) for cc in cc_embeds]
     elif pool_fn == "mean":
@@ -298,6 +298,159 @@ def get_cache_path(G_name, tmp_dir):
     G_curr = G_name + ".pkl"
     return G_curr, os.path.join(tmp_dir, G_curr)
 
+
+def analyze_probabilities(model_name, label_dict, G_dir, cache_dir, debugging_flag=False):
+    # baseline approach with encoder
+    embed0_dict_path = os.path.join(cache_dir, model_name + ".embed0_dict")
+    embed1_dict_path = os.path.join(cache_dir, model_name + ".embed1_dict")
+    size_dict_path = os.path.join(cache_dir, model_name + ".size_dict")
+
+    num_total = len(os.listdir(G_dir))
+    num_1s = int(np.sum([get_label_from_dict(G.split(".")[0].split("_")[0], label_dict) for G in os.listdir(G_dir)]))
+    num_0s = num_total - num_1s
+    
+     # iterate on dataset
+    rps, mrds, tnrs = [], [], []
+    size_dict, stat_dict, embed0_dict, embed1_dict = {}, {}, {}, {}
+    sal_pooled_list = []
+    nonsal_pooled_list = []
+    
+    embed_log = []
+    for j,G in enumerate(os.listdir(G_dir)):
+        if ".obj" not in G:
+            continue
+        G_alias = G.split(".")[0].split("_")[0]
+        y = get_label_from_dict(G_alias, label_dict)
+        
+        if y == 1:
+            G_name = G.split(".")[0]
+            G_path = os.path.join(G_dir, G)
+            G = deserialize(G_path)
+            B = binarize_graph_otsu_without_norm(G, key="cell-prob")
+            
+            with warnings.catch_warnings(): # after 3.10, add: action="ignore"
+                warnings.simplefilter("ignore") # needs updating after 3.10
+                rps.append(region_prevalence(B))
+                mrds.append(mean_region_dispersion(B))
+                
+            cc_list = get_salient_subgraphs(B)
+            size_dict[G_name] = [len(c) for c in cc_list]    
+            cc_pooled = get_pooled_embeds(G_path, cc_list)
+            #=======================
+            # ADD sal_pooled to get pooled for salient region (1) - add to a list
+            if cc_pooled == []:
+                pass
+            else:
+                sal_pooled_list.append(np.max(cc_pooled, axis=0))
+            #=======================
+            embed1_dict[G_name] = cc_pooled
+            
+            if len(embed_log) > 30 and np.sum(embed_log) == 0: #arbitrary threshold
+                print("Warning: breaking early b/c very few detected biomarkers in class-1 examples")
+                stat_dict = ["Limited detection"]
+                serialize(stat_dict, stat_dict_path)
+                return 1
+            else:
+                valid_cc = [1 for el in cc_pooled if el is not None]
+                valid_ex = np.sum(valid_cc)
+                embed_log.append(valid_ex) # track what we find
+                if debugging_flag == True:
+                    break
+        print("class-1 sampling:", j)
+    
+    # save dicts
+    serialize(size_dict, size_dict_path)
+    serialize(embed1_dict, embed1_dict_path)
+    X1 = construct_class_dataset(embed1_dict_path, size_dict_path)
+    y1 = np.ones(X1.shape[0])
+    num_embeds = X1.shape[0]
+    print("num embeds for class-1:", num_embeds)
+    num_samples = np.max([num_embeds // num_0s, 1])
+    print("num sample per class-0 example:", num_samples)
+    
+    # now iterate through class-0 for sampling
+    for j,G in enumerate(os.listdir(G_dir)):
+        G_alias = G.split(".")[0].split("_")[0]
+        y = get_label_from_dict(G_alias, label_dict)
+        if y == 0:
+            G_name = G.split(".")[0]
+            G_path = os.path.join(G_dir, G)
+            G = deserialize(G_path)
+            B = binarize_graph_otsu_without_norm(G, key="cell-prob")
+            tnrs.append(class0_accuracy_tnr(B))
+            
+            cc_list = sample_class0_regions(G_path, size_dict_path, num_samples)
+            size_dict[G_name] = [len(c) for c in cc_list]
+            cc_pooled = get_pooled_embeds(G_path, cc_list)
+            nonsal_pooled_list.append(np.max(cc_pooled, axis=0))
+            embed0_dict[G_name] = cc_pooled
+            
+            if debugging_flag == True:
+                break
+        print("class-0 sampling:", j)
+    
+    serialize(size_dict, size_dict_path)
+    serialize(embed0_dict, embed0_dict_path)
+    X0 = construct_class_dataset(embed0_dict_path, size_dict_path)
+    y0 = np.zeros(X0.shape[0])
+    print("num embeds for class-0:", X0.shape[0])
+    
+    # combine datasets
+    X = np.vstack([X1, X0])
+    y = np.hstack([y1, y0])
+    # print(y)
+    print("Training model to predict region class...")
+    print("shapes:", X.shape, y.shape)
+    outs = test_of_signal(X, y)
+    
+    # ============TO ADD: pool per sample=======
+    X1 = np.array(sal_pooled_list)
+    X0 = np.array(nonsal_pooled_list)
+    y1 = np.ones(X1.shape[0])
+    y0 = np.zeros(X0.shape[0])
+    X = np.vstack([X1, X0])
+    y = np.hstack([y1, y0])
+    # print(y)
+    print("Training model to predict pooled salience class...")
+    print("shapes:", X.shape, y.shape)
+    outs_sal = test_of_signal(X, y)
+    #=========================================
+    
+    # now do Test of Signal with region cutoffs
+    X,y = filter_by_cutoff(embed1_dict_path, embed0_dict_path, size_dict_path, cutoff=1)
+    print("Training model to predict region class (cutoff 1)...")
+    print("shapes:", X.shape, y.shape)
+    outs_c1 = test_of_signal(X, y)
+    
+    X,y = filter_by_cutoff(embed1_dict_path, embed0_dict_path, size_dict_path, cutoff=10)
+    print("Training model to predict region class (cutoff 10)...")
+    print("shapes:", X.shape, y.shape)
+    outs_c10 = test_of_signal(X, y)
+    
+    X,y = filter_by_cutoff(embed1_dict_path, embed0_dict_path, size_dict_path, cutoff=25)
+    print("Training model to predict region class (cutoff 25)...")
+    print("shapes:", X.shape, y.shape)
+    outs_c25 = test_of_signal(X, y)
+    
+    # load stats into dict
+    stat_dict = {"prev": rps,
+                "disp": mrds,
+                "tnr": tnrs,
+                "auc_score_sal": outs_sal,
+                "auc_score": outs,
+                "auc_score_c1": outs_c1,
+                "auc_score_c10": outs_c10,
+                "auc_score_c25": outs_c25}
+    
+    if debugging_flag == True:
+        print("Debugging flag is on, breaking early")
+        print(stat_dict)
+        return 0
+    
+    print("Completed!")
+    return stat_dict
+
+
 def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_path, debugging_flag=True, notebook_flag=None, ignore_flag=False):    
     model_name = model_str.split(".model")[0]
     print("On model:", model_name)
@@ -305,7 +458,7 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
     stat_dict_path = os.path.join(cache_dir, model_name + ".stat_dict")
     embed0_dict_path = os.path.join(cache_dir, model_name + ".embed0_dict")
     embed1_dict_path = os.path.join(cache_dir, model_name + ".embed1_dict")
-    # last two vars are for pooled embeds
+
     status_dict = deserialize(status_dict_path)
     
     num_total = len(os.listdir(G_dir))
@@ -358,6 +511,11 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
     status_dict[model_str] == 0.5
     serialize(status_dict, status_dict_path)
     
+    # nwely added metrics
+    # print("\nFirstly, computing zero-shot classification accuracy...")
+    # out_accs = classification_accuracy(model, label_dict, G_dir)
+    # print("ZS clf accuracy:", out_accs)
+    
     # first iterate through class-1
     # with alive_bar(num_1s, force_tty=notebook_flag) as bar:
     #     bar.text('Class-1')
@@ -379,11 +537,14 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
             cc_pooled = get_pooled_embeds(G_path, cc_list)
             #=======================
             # ADD sal_pooled to get pooled for salient region (1) - add to a list
-            sal_pooled_list.append(np.max(cc_pooled, axis=0))
+            if cc_pooled == []:
+                pass
+            else:
+                sal_pooled_list.append(np.max(cc_pooled, axis=0))
             #=======================
             embed1_dict[G_name] = cc_pooled
             
-            if len(embed_log) > 30 and np.sum(embed_log) == 0:
+            if len(embed_log) > 30 and np.sum(embed_log) == 0: #arbitrary threshold
                 print("Warning: breaking early b/c very few detected biomarkers in class-1 examples")
                 stat_dict = ["Limited detection"]
                 serialize(stat_dict, stat_dict_path)
@@ -394,7 +555,7 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
                 embed_log.append(valid_ex) # track what we find
                 if debugging_flag == True:
                     break
-        print("class-1 sample:", j)
+        print("class-1 sampling:", j)
                 # bar()
     
     # save dicts
@@ -408,7 +569,7 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
     num_samples = np.max([num_embeds // num_0s, 1])
     print("num sample per class-0 example:", num_samples)
     
-    # now iterate through class-0 again for sampling
+    # now iterate through class-0 for sampling
     # with alive_bar(num_0s, force_tty=notebook_flag) as bar:
     #     bar.text('Class-0')
     for j,G in enumerate(os.listdir(G_dir)):
@@ -427,7 +588,7 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
             
             if debugging_flag == True:
                 break
-        print("class-0 sample:", j)
+        print("class-0 sampling:", j)
                 # bar()
     
     serialize(size_dict, size_dict_path)
@@ -472,7 +633,7 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
     print("Training model to predict region class (cutoff 25)...")
     print("shapes:", X.shape, y.shape)
     outs_c25 = test_of_signal(X, y)
-
+    
     # load stats into dict
     stat_dict = {"prev": rps,
                 "disp": mrds,
@@ -493,7 +654,9 @@ def analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_pa
     print()
     return 1 # successful exit code
 
-    
+def generate_hypothesis(model, G_path):
+    B = get_binary_P(G_path, model, viz_flag=False, thresh_style="otsu", prospect_style="equal")
+    return B
     
 def generate_hypotheses_for_model(model, label_dict, G_dir, save_dir, notebook_flag=None, thresh_style="otsu", prospect_style="equal"):    
     num_total = len(os.listdir(G_dir))
@@ -563,6 +726,31 @@ def generate_join_hypotheses(G_dir1, G_dir2, save_dir, notebook_flag=None):
             G = graph_hadamard(G1, G2, "emb", "emb")
             serialize(G, os.path.join(save_dir, G_new))
             bar()
+
+
+def merge_probs_embs(G_dir1, G_dir2, save_dir, notebook_flag=None):
+    # G1: baseline probabilities
+    # G2: encoded
+    num_total = len(os.listdir(G_dir1))
+    print("Total:", num_total)
+    
+    with alive_bar(num_total, force_tty=notebook_flag) as bar:
+        bar.text('Full dataset')
+        for G in os.listdir(G_dir1):
+            G1_path = os.path.join(G_dir1, G)
+            G1 = deserialize(G1_path)
+            
+            G2_path = os.path.join(G_dir2, G)
+            G2 = deserialize(G2_path)
+            
+            G_new = G1.copy()
+            embs = nx.get_node_attributes(G2, "emb")
+            nx.set_node_attributes(G_new, embs, "emb")
+            
+            G_new_path = G.split(".")[0] + "_with_prob.obj"
+            serialize(G_new, os.path.join(save_dir, G_new_path))
+            bar()
+
 
 def generate_join_concepts(G_dir1, G_dir2, label_dict, proc_path, save_dir, notebook_flag=None):
     # G1: og 
@@ -635,19 +823,60 @@ def graph2df(G, attributes):
     df = pd.DataFrame(data)
     return df
 
+# added for final analysis -- we can just compute for any model in the running
+def classification_accuracy(model, label_dict, G_dir):
+    ys, yhats = [], []
+    for j,G in enumerate(os.listdir(G_dir)):
+        y = get_label_from_dict(G, label_dict)
+        G_name = G.split(".")[0]
+        G_path = os.path.join(G_dir, G)
+        G = deserialize(G_path)
+        S = model.construct_sprite(G)
+        g = model.embed_sprite(S)
+        yhat = model.zero_shot_classifier(g)
+        ys.append(y)
+        yhats.append(yhat)
+    return metrics.accuracy_score(ys, yhats)
+        
+def get_full_graph_pool_baseline(G_dir, label_dict, pool_fn="max"):
+    Xs, ys = [], []
+    for j,G in enumerate(os.listdir(G_dir)):
+        y = get_label_from_dict(G, label_dict)
+        G_name = G.split(".")[0]
+        G_path = os.path.join(G_dir, G)
+        G = deserialize(G_path)
+        # get all embeds
+        embeds = nx.get_node_attributes(G, "emb")
+        if pool_fn == "max":
+            vec = np.max(list(embeds.values()), axis=0)
+        elif pool_fn == "mean":
+            vec = np.mean(list(embeds.values()), axis=0)
+        Xs.append(vec)
+        ys.append(y)
+        if (j+1 % 20) == 0:
+            print("Completed:", j+1)
+        
+    X = np.array(Xs)
+    y = np.array(ys)
+    print("Training model to predict pooled salience class...")
+    print("shapes:", X.shape, y.shape)
+    outs_sal = test_of_signal(X, y)
+    return outs_sal
+
 
 #========================BASH SCRIPTING========================
 def main():
-    model_dir = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/outputs/gridsearch_results/k2models"    
+    model_dir = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/outputs/gridsearch_results_final/k2models"    
     label_path = "/scr/biggest/gmachi/datasets/celldive_lung/processed/label_dict.obj"
     label_dict = deserialize(label_path)
-    G_dir = "/scr/biggest/gmachi/datasets/celldive_lung/for_ml/for_prospect/"
-    cache_dir = "/scr/biggest/gmachi/datasets/celldive_lung/analysis_cache"
-    status_dict_path = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/status_dict.obj"
+    G_dir = "/scr/biggest/gmachi/datasets/celldive_lung/for_ml/for_prospect_final/"
+    cache_dir = "/scr/biggest/gmachi/datasets/celldive_lung/analysis_cache_final"
+    status_dict_path = "/scr/gmachi/prospection/K2/notebooks/spatial-bio/status_dict_final.obj"
     status_dict = deserialize(status_dict_path)
         
     # change for testing ================
-    k = 11 #[8,9,10,11,12,13,14,15,16,17,18,19,20]
+    debug_flag = False
+    k = 9 #[8,9,10,11,12,13,14,15,16,17,18,19,20]
     #====================================
     print("Starting analysis for k =", k)
     # count number valid out of 16 models
@@ -662,28 +891,37 @@ def main():
     ran_set = []
     running_set = []
     to_run_set = []
-    for file_str in os.listdir(cache_dir):
+    for file_str in os.listdir(cache_dir):        
         if "k"+str(k) not in file_str:
             continue
-        if "tau1.00" in file_str or "tau2.00" in file_str:
-            print("Skipping b/c tau > 0:", model_str)
-            continue
+        # if "tau1.00" in file_str or "tau2.00" in file_str:
+        #     print("Skipping b/c tau > 0:", model_str)
+        #     continue
         if "stat_dict" not in file_str:
             continue
         try:
             rd = deserialize(os.path.join(cache_dir, file_str))
-            if len(rd.keys()) == 8 or len(rd["prev"]) == num_1s:
-                ran_set.append(file_str.split(".")[0])
+            cache_str = "".join(file_str.split(".")[:-1])
+
+            if rd == {}:
+                to_run_set.append(cache_str) # used to be: file_str.split(".")[0]
+            elif rd == ["Limited detection"]:
+                ran_set.append(cache_str)
+            elif len(rd.keys()) == 8 or len(rd["prev"]) == num_1s:
+                ran_set.append(cache_str)
             else:
-                running_set.append(file_str.split(".")[0])
-        except KeyError:
-            to_run_set.append(file_str.split(".")[0])
+                print("Partially complete:", file_str)
+                running_set.append(cache_str)
+        except KeyError or AttributeError:
+            print("Partially complete:", file_str)
+            to_run_set.append(cache_str)
             # print(rd)
             # print(os.path.join(cache_dir, file_str))
             
     print("Already analyzed:", len(ran_set), "out of", N)
     print("Currently running:", len(running_set), "out of", N)
-    print("To analyze (partially complete):", len(to_run_set), "out of", N)
+    print("Partially complete:", len(to_run_set), "out of", N)
+    print("Missing:", N - len(ran_set) - len(running_set) - len(to_run_set), "out of", N)
     print()
     # print("ran:", ran_set)
     # print("to run:", to_run_set)
@@ -693,14 +931,15 @@ def main():
     for i,model_str in enumerate(os.listdir(model_dir)):
         if "k"+str(k) not in model_str:
             continue
-        if "tau1.00" in model_str or "tau2.00" in model_str:
-            print("Skipping b/c tau > 0:", model_str)
-            continue
-        if model_str.split(".")[0] in ran_set:
+        # if "tau1.00" in model_str or "tau2.00" in model_str:
+        #     print("Skipping b/c tau > 0:", model_str)
+        #     continue
+        cache_str = "".join(model_str.split(".")[:-1])        
+        if cache_str in ran_set:
             print("Skipping b/c already analyzed:", model_str)
             continue
         
-        print("On model:", i, "/", len(os.listdir(model_dir)), ":", model_str)
+        # print("On model:", i, "/", len(os.listdir(model_dir)), ":", model_str)
         model_path = os.path.join(model_dir, model_str)
 
         # check if valid model
@@ -710,9 +949,9 @@ def main():
             print("Skipping b/c corrupted:", model_str)
             continue
         
-        exit_code = analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_path, debugging_flag=False, notebook_flag=False, ignore_flag=False)
+        exit_code = analyze_model(model, model_str, label_dict, G_dir, cache_dir, status_dict_path, debugging_flag=debug_flag, notebook_flag=False, ignore_flag=False)
         status_dict[model_str] = exit_code
-        serialize(status_dict, "status_dict.obj")
+        serialize(status_dict, "status_dict_final.obj")
 
 if __name__ == "__main__":
     main()
