@@ -11,6 +11,9 @@ from matplotlib import cm, colors
 import os
 import pdb
 
+from scipy.stats import entropy
+
+
 # import holoviews as hv
 # from holoviews import opts, dim
 # from bokeh.sampledata.les_mis import data
@@ -530,7 +533,8 @@ def visualize_cell_graph(G, key="cell_type", node_colors=None, prospect_flag=Fal
                     node_colors = [matplotlib.cm.get_cmap("viridis")(norm(nv)) for nv in node_vals]
                 else:
                     print("using extended colormap")
-                    unique_cell_types = sorted(set([G.nodes[n]["salient"] for n in G.nodes]))
+                    # unique_cell_types = sorted(set([G.nodes[n]["salient"] for n in G.nodes]))
+                    unique_cell_types = sorted(set([G.nodes[n]["salient"] for n in G.nodes if not math.isnan(G.nodes[n]["salient"])]))
                     print("unique cell types:", unique_cell_types)
                     node_colors = [joint_cmap([G.nodes[n]["salient"]]) for n in G.nodes]
                     alphas = [norm(nv) for nv in node_vals]
@@ -641,6 +645,22 @@ def mean_over_cutoff(x):
 
 def magnitude(x):
     return np.max(x) - np.min(x)
+
+def mad(x):
+    return np.median(np.abs(x - np.median(x)))
+
+def local_std_deviation(x):
+    return np.std(x)
+
+def shannon_entropy(x):
+    hist, _ = np.histogram(x, bins='auto', density=True)
+    return entropy(hist, base=2)
+
+def coefficient_of_variation(x):
+    return np.std(x) / np.mean(x) if np.mean(x) != 0 else 0
+
+def normalized_range(x):
+    return (np.max(x) - np.min(x)) / np.mean(x) if np.mean(x) != 0 else 0
 
 def joint_population_cutoff(x):
     unique, counts = np.unique(x, return_counts=True)
@@ -812,7 +832,8 @@ def visualize_cell_hexbin(G, concepts, key, mode="expression", cmap_str="gray", 
             node_vals = [norm(nv) for nv in node_vals]
             sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_str)
             if mag_flag == True:
-                plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_str, reduce_C_function=magnitude)
+                plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_str, reduce_C_function=normalized_range) 
+                # used to use magnitude
             else:
                 plt.hexbin(node_coords[:, 0], node_coords[:, 1], C=node_vals, gridsize=30, cmap=cmap_str)
     
