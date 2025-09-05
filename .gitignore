@@ -7,3 +7,5 @@ notebooks/spatial-bio/outputs/*
 notebooks/spatial-bio/runs/*
 notebooks/spatial-bio/scraps/*
 notebooks/spatial-bio/obsolete/*
+notebooks/spatial-bio/outputs/
+notebooks/spatial-bio/older/
